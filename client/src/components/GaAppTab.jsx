@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useApi } from '../hooks/useApi';
 
 function fmt(n) { return n != null ? n.toLocaleString() : '—'; }
@@ -18,6 +19,112 @@ function KpiCard({ label, value, prev, sub }) {
         {sub && <span className="text-[10px] text-text-muted">{sub}</span>}
         {prev != null && <Delta curr={parseFloat(String(value).replace(/,/g, ''))} prev={prev} />}
       </div>
+    </div>
+  );
+}
+
+function fmtDateKey(k) { return `${k.slice(0,4)}-${k.slice(4,6)}-${k.slice(6)}`; }
+function dateKeyToISO(k) { return `${k.slice(0,4)}-${k.slice(4,6)}-${k.slice(6)}`; }
+function isoToDateKey(iso) { return iso.replace(/-/g, ''); }
+
+function shiftDateKey(key, days) {
+  const d = new Date(`${fmtDateKey(key)}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10).replace(/-/g, '');
+}
+
+const METRICS = [
+  { label: 'Total Installs', key: 'newUsers', get: d => d?.newUsers },
+  { label: 'Android', key: 'android', get: d => d?.android?.newUsers },
+  { label: 'iOS', key: 'ios', get: d => d?.ios?.newUsers },
+];
+
+function CompareTable({ title, selected, compare, label1, label2 }) {
+  return (
+    <div className="bg-card border border-border rounded-lg p-4">
+      <h3 className="text-sm font-semibold text-text-primary mb-3">{title}</h3>
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-border">
+            <th className="text-left text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Metric</th>
+            <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">{label1}</th>
+            <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">{label2}</th>
+            <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Change</th>
+          </tr>
+        </thead>
+        <tbody>
+          {METRICS.map(row => {
+            const curr = row.get(selected);
+            const prev = row.get(compare);
+            return (
+              <tr key={row.key} className="border-b border-border/50 hover:bg-bg">
+                <td className="py-2.5 px-3 text-xs font-medium text-text-primary">{row.label}</td>
+                <td className="py-2.5 px-3 text-xs text-right font-semibold text-text-primary">{fmt(curr)}</td>
+                <td className="py-2.5 px-3 text-xs text-right text-text-secondary">{fmt(prev)}</td>
+                <td className="py-2.5 px-3 text-xs text-right">
+                  {curr != null && prev != null && prev > 0
+                    ? <Delta curr={curr} prev={prev} />
+                    : <span className="text-text-muted">—</span>}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function InstallsCard({ dates, byDate }) {
+  const latestKey = dates[dates.length - 1].date;
+  const earliestKey = dates[0].date;
+  const [selectedDate, setSelectedDate] = useState(dateKeyToISO(latestKey));
+
+  const selKey = isoToDateKey(selectedDate);
+  const selected = byDate[selKey] || null;
+  const dodKey = shiftDateKey(selKey, -1);
+  const wowKey = shiftDateKey(selKey, -7);
+  const dodEntry = byDate[dodKey] || null;
+  const wowEntry = byDate[wowKey] || null;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="bg-card border border-border rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold text-text-primary">App Installs</h2>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-text-muted">Date:</span>
+            <input
+              type="date"
+              value={selectedDate}
+              min={dateKeyToISO(earliestKey)}
+              max={dateKeyToISO(latestKey)}
+              onChange={e => setSelectedDate(e.target.value)}
+              className="bg-bg border border-border text-text-primary text-xs px-2.5 py-1.5 rounded-md focus:outline-none focus:border-accent"
+            />
+          </div>
+        </div>
+        {!selected && <p className="text-xs text-warning mt-2">No data for {selectedDate}</p>}
+      </div>
+
+      {selected && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <CompareTable
+            title="Day over Day"
+            selected={selected}
+            compare={dodEntry}
+            label1={fmtDateKey(selKey)}
+            label2={dodEntry ? fmtDateKey(dodKey) : 'No data'}
+          />
+          <CompareTable
+            title="Week over Week"
+            selected={selected}
+            compare={wowEntry}
+            label1={fmtDateKey(selKey)}
+            label2={wowEntry ? fmtDateKey(wowKey) : 'No data'}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -73,6 +180,9 @@ export default function GaAppTab({ start, end }) {
           <KpiCard label="iOS Installs" value={fmt(latest?.ios.newUsers)} prev={prev?.ios.newUsers} />
         </div>
       </div>
+
+      {/* App Installs — DoD & WoW with date picker */}
+      {dates.length > 0 && <InstallsCard dates={dates} byDate={byDate} />}
 
       {/* Period Totals */}
       <div className="bg-card border border-border rounded-lg p-4">
