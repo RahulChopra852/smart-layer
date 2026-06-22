@@ -10,6 +10,7 @@ import GaAppTab from './components/GaAppTab';
 import GaWebTab from './components/GaWebTab';
 import SyncStatus from './components/SyncStatus';
 import HomePage from './components/HomePage';
+import ChatWidget from './components/ChatWidget';
 
 const TABS = [
   { id: 'cro', label: 'CRO' },
@@ -43,7 +44,10 @@ export default function App() {
   }, []);
 
   if (tab === null) {
-    return <HomePage onNavigate={handleNavigate} />;
+    return <>
+      <HomePage onNavigate={handleNavigate} />
+      <ChatWidget />
+    </>;
   }
 
   return (
@@ -97,6 +101,7 @@ export default function App() {
         {tab === 'abtests' && <AbTestsTab start={start} end={end} />}
         {tab === 'vwo' && <VwoTab />}
       </main>
+      <ChatWidget />
     </div>
   );
 }

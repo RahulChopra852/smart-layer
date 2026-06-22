@@ -292,15 +292,15 @@ function FloatingCard({ tab, index, total, onNavigate, mousePos }) {
       onClick={() => { playClickSound(); onNavigate(tab.id); }}
     >
       <div
-        className="relative w-[140px] h-[100px] rounded-xl border backdrop-blur-md transition-all duration-300 flex flex-col items-center justify-center gap-2 overflow-hidden"
+        className="relative w-[140px] h-[110px] rounded-xl border backdrop-blur-xl transition-all duration-300 flex flex-col items-center justify-center gap-2 overflow-hidden"
         style={{
-          borderColor: hovered ? tab.color : 'rgba(140, 160, 255, 0.15)',
+          borderColor: hovered ? `${tab.color}90` : 'rgba(255, 255, 255, 0.12)',
           background: hovered
-            ? `linear-gradient(135deg, ${tab.color}18, ${tab.color}08, rgba(10,15,30,0.7))`
-            : 'rgba(8, 12, 24, 0.7)',
+            ? `linear-gradient(135deg, ${tab.color}22, rgba(255,255,255,0.08), rgba(255,255,255,0.04))`
+            : 'linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03), rgba(255,255,255,0.01))',
           boxShadow: hovered
-            ? `0 0 30px ${tab.color}35, 0 0 80px ${tab.color}10, inset 0 1px 0 rgba(255,255,255,0.08)`
-            : '0 4px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.03)',
+            ? `0 8px 32px ${tab.color}30, 0 0 80px ${tab.color}10, inset 0 1px 0 rgba(255,255,255,0.15), inset 0 -1px 0 rgba(255,255,255,0.05)`
+            : '0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1), inset 0 -1px 0 rgba(255,255,255,0.03)',
         }}
       >
         {/* Glow ring on hover */}
@@ -331,8 +331,8 @@ function FloatingCard({ tab, index, total, onNavigate, mousePos }) {
           {tab.label}
         </span>
 
-        <span className="text-[10px] font-medium tracking-wider uppercase relative z-10 transition-colors duration-300"
-          style={{ color: hovered ? `${tab.color}` : '#E2E8F0' }}>
+        <span className="text-[10px] font-medium tracking-wider uppercase relative z-10 transition-colors duration-300 text-center leading-tight px-2"
+          style={{ color: hovered ? `${tab.color}` : 'rgba(226,232,240,0.7)' }}>
           {tab.desc}
         </span>
 
@@ -453,7 +453,7 @@ export default function HomePage({ onNavigate }) {
 
       {/* Bottom bar */}
       <div className={`absolute bottom-6 left-0 right-0 flex justify-center z-10 transition-all duration-700 delay-700 ${showCards ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
-        <div className="flex items-center gap-6 px-6 py-3 rounded-full border border-white/5 backdrop-blur-md bg-white/[0.03]">
+        <div className="flex items-center gap-6 px-6 py-3 rounded-full border border-white/10 backdrop-blur-xl bg-white/[0.06]" style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)' }}>
           <div className="flex items-center gap-2">
             <div className="w-1.5 h-1.5 rounded-full bg-positive animate-pulse" />
             <span className="text-[10px] text-slate-500 tracking-wider uppercase">9 Modules Active</span>

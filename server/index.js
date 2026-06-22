@@ -8,6 +8,7 @@ import syncRoutes from './routes/sync.js';
 import metaRoutes from './routes/meta.js';
 import rcaRoutes from './routes/rca.js';
 import analyticsRoutes from './routes/analytics.js';
+import chatRoutes from './routes/chat.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -20,6 +21,7 @@ app.use('/api/sync', syncRoutes);
 app.use('/api/meta', metaRoutes);
 app.use('/api/rca', rcaRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/chat', chatRoutes);
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 
