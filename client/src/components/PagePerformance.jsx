@@ -21,11 +21,11 @@ export default function PagePerformance({ start, end, mode = 'top' }) {
 
   const isTop = mode === 'top';
   const pages = isTop
-    ? allPages.slice(0, 10)
-    : allPages.filter(p => p.sessions >= 500).sort((a, b) => a.atc_rate - b.atc_rate).slice(0, 10);
+    ? allPages.filter(p => p.sessions >= 1000).slice(0, 40)
+    : allPages.filter(p => p.sessions >= 1000 && p.atc_rate < 0.03).sort((a, b) => a.atc_rate - b.atc_rate).slice(0, 40);
 
   const title = isTop ? 'Top Pages' : 'Needs Attention';
-  const subtitle = isTop ? 'Highest traffic landing pages' : 'High sessions (500+), lowest ATC%';
+  const subtitle = isTop ? 'Landing pages with 1,000+ sessions' : 'Pages with 1,000+ sessions & below 3% ATC';
 
   return (
     <div className="bg-card border border-border rounded-lg p-4">

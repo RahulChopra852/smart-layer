@@ -9,6 +9,7 @@ import MetaTab from './components/MetaTab';
 import GaAppTab from './components/GaAppTab';
 import GaWebTab from './components/GaWebTab';
 import SyncStatus from './components/SyncStatus';
+import HomePage from './components/HomePage';
 
 const TABS = [
   { id: 'cro', label: 'CRO' },
@@ -32,17 +33,31 @@ export default function App() {
   const defaults = getDefaultDates();
   const [start, setStart] = useState(defaults.start);
   const [end, setEnd] = useState(defaults.end);
-  const [tab, setTab] = useState('cro');
+  const [tab, setTab] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const handleSyncComplete = useCallback(() => setRefreshKey(k => k + 1), []);
+
+  const handleNavigate = useCallback((tabId) => {
+    setTab(tabId);
+  }, []);
+
+  if (tab === null) {
+    return <HomePage onNavigate={handleNavigate} />;
+  }
 
   return (
     <div className="min-h-screen bg-bg">
       <header className="sticky top-0 z-10 bg-card/90 backdrop-blur-md border-b border-border">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <h1 className="text-lg font-semibold text-text-primary">GNC Smart Layer</h1>
+            <button
+              onClick={() => setTab(null)}
+              className="text-lg font-semibold text-text-primary hover:text-accent transition-colors"
+              title="Back to home"
+            >
+              GNC Smart Layer
+            </button>
             <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-positive/15 text-positive uppercase tracking-wide">Live</span>
           </div>
           <div className="flex items-center gap-4">
@@ -76,7 +91,7 @@ export default function App() {
         {tab === 'ga-app' && <GaAppTab start={start} end={end} />}
         {tab === 'ga-web' && <GaWebTab start={start} end={end} />}
         {tab === 'vitals' && <WebVitalsTab start={start} end={end} />}
-        {tab === 'products' && <ProductsTab />}
+        {tab === 'products' && <ProductsTab start={start} end={end} />}
         {tab === 'meta' && <MetaTab />}
         {tab === 'anomalies' && <AnomaliesTab start={start} />}
         {tab === 'abtests' && <AbTestsTab start={start} end={end} />}

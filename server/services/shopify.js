@@ -36,7 +36,8 @@ async function shopifyQL(qlQuery) {
   if (result.parseErrors && result.parseErrors.length > 0) {
     throw new Error(`ShopifyQL parse error: ${result.parseErrors.join(', ')}`);
   }
-  return result.tableData ? result.tableData.rows : [];
+  if (!result.tableData) return [];
+  return result.tableData.rows;
 }
 
 const ORDERS_QUERY = `
@@ -109,22 +110,21 @@ export async function fetchOrdersSince(sinceDate) {
   return { dailyRows, productRows, latestDate: dailyRows.length ? dailyRows[dailyRows.length - 1][0] : null };
 }
 
-// Sessions by landing page + source (utm_source primary, referrer_source fallback for untagged traffic),
-// since the given date. Uses verified ShopifyQL fields — see SPEC.md for field verification notes.
+// Sessions by landing page + source, capped at 200 rows per source query.
 export async function fetchPageSessionsSince(sinceDate) {
   assertConfigured();
-  const since = `SINCE ${sinceDate}`;
+  const range = `SINCE ${sinceDate} UNTIL today`;
 
   const utmRows = await shopifyQL(
-    `FROM sessions SHOW sessions, sessions_with_cart_additions GROUP BY day, landing_page_path, utm_source ${since} UNTIL today TIMESERIES day`
+    `FROM sessions SHOW sessions, sessions_with_cart_additions GROUP BY day, landing_page_path, utm_source ${range} ORDER BY sessions DESC LIMIT 200 TIMESERIES day`
   );
   const referrerRows = await shopifyQL(
-    `FROM sessions SHOW sessions, sessions_with_cart_additions GROUP BY day, landing_page_path, referrer_source ${since} UNTIL today TIMESERIES day`
+    `FROM sessions SHOW sessions, sessions_with_cart_additions GROUP BY day, landing_page_path, referrer_source ${range} ORDER BY sessions DESC LIMIT 200 TIMESERIES day`
   );
 
   const rows = [];
   for (const r of utmRows) {
-    if (!r.utm_source) continue; // null utm_source rows are covered by the referrer_source pull instead
+    if (!r.utm_source) continue;
     const sessions = parseInt(r.sessions, 10) || 0;
     const atc = parseInt(r.sessions_with_cart_additions, 10) || 0;
     rows.push([r.day, r.landing_page_path, 'utm_source', r.utm_source, sessions, atc, sessions ? (atc / sessions) : 0]);

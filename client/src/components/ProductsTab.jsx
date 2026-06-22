@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useApi } from '../hooks/useApi';
 
 function Delta({ value, suffix = '' }) {
@@ -11,27 +12,48 @@ function Delta({ value, suffix = '' }) {
   );
 }
 
-export default function ProductsTab() {
-  const { data, loading, error } = useApi('/api/analytics/products');
+export default function ProductsTab({ start, end }) {
+  const [selectedDate, setSelectedDate] = useState(end);
+  const { data, loading, error } = useApi(`/api/analytics/products?date=${selectedDate}`);
   const products = data?.products || [];
   const dates = data?.dates || {};
+  const availableDates = data?.availableDates || [];
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const isToday = selectedDate === todayStr;
+  const hasData = availableDates.includes(selectedDate);
 
   return (
     <div className="flex flex-col gap-4">
       <div className="bg-card border border-border rounded-lg p-4">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-base font-semibold text-text-primary">Products Insights</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-semibold text-text-primary">Products Insights</h2>
+              {hasData && (
+                <span className="relative flex h-2.5 w-2.5" title={isToday ? 'Live — today' : `Viewing ${selectedDate}`}>
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isToday ? 'bg-positive' : 'bg-accent'}`} />
+                  <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isToday ? 'bg-positive' : 'bg-accent'}`} />
+                </span>
+              )}
+            </div>
             <p className="text-xs text-text-muted mt-0.5">
-              Top products by units sold
-              {dates.today && <> — {dates.today}</>}
+              {dates.today && <>Showing {dates.today}</>}
               {dates.yesterday && <> vs {dates.yesterday} (DoD)</>}
               {dates.weekAgo && <> vs {dates.weekAgo} (WoW)</>}
             </p>
           </div>
-          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-accent/15 text-accent">
-            {products.length} products
-          </span>
+          <div className="flex items-center gap-3">
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={e => setSelectedDate(e.target.value)}
+              className="bg-bg border border-border text-text-primary text-xs px-2.5 py-1.5 rounded-md focus:outline-none focus:border-accent"
+            />
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-accent/15 text-accent">
+              {products.length} products
+            </span>
+          </div>
         </div>
 
         {loading ? (
@@ -43,8 +65,12 @@ export default function ProductsTab() {
           <p className="text-xs text-negative text-center py-12">{error}</p>
         ) : products.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-sm text-text-muted mb-2">No product data yet</p>
-            <p className="text-xs text-text-muted">Sync Shopify orders first — click "Sync Now" in the header. The first sync may take a few minutes as it fetches order history.</p>
+            <p className="text-sm text-text-muted mb-2">No product data for {selectedDate}</p>
+            <p className="text-xs text-text-muted">
+              {availableDates.length > 0
+                ? `Data available from ${availableDates[0]} to ${availableDates[availableDates.length - 1]}`
+                : 'Sync Shopify orders first — click "Sync Now" in the header.'}
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -53,11 +79,13 @@ export default function ProductsTab() {
                 <tr className="border-b border-border">
                   <th className="text-left text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3 w-8">#</th>
                   <th className="text-left text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Product</th>
-                  <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Today</th>
-                  <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Yesterday</th>
+                  <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">
+                    {isToday ? 'Today' : selectedDate}
+                  </th>
+                  <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Prev Day</th>
                   <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">DoD</th>
                   <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">DoD %</th>
-                  <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Last Week</th>
+                  <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Week Ago</th>
                   <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">WoW</th>
                   <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">WoW %</th>
                 </tr>

@@ -86,13 +86,14 @@ export async function getCommerceSnapshot() {
 }
 
 // Product insights — top products by units sold with DoD and WoW deltas.
-export async function getProductInsights(limit = 40) {
+export async function getProductInsights(limit = 40, selectedDate = null) {
   const rows = await readRows('shopify_products');
-  if (rows.length === 0) return { products: [], dates: {} };
+  if (rows.length === 0) return { products: [], dates: {}, availableDates: [] };
 
   const allDates = [...new Set(rows.map(r => r.date))].sort();
-  const today = allDates[allDates.length - 1];
-  const yesterday = allDates.length > 1 ? allDates[allDates.length - 2] : null;
+  const today = selectedDate && allDates.includes(selectedDate) ? selectedDate : allDates[allDates.length - 1];
+  const todayIdx = allDates.indexOf(today);
+  const yesterday = todayIdx > 0 ? allDates[todayIdx - 1] : null;
 
   const todayDate = new Date(today + 'T00:00:00Z');
   const weekAgoDate = new Date(todayDate);
@@ -132,7 +133,7 @@ export async function getProductInsights(limit = 40) {
       };
     });
 
-  return { products, dates: { today, yesterday, weekAgo } };
+  return { products, dates: { today, yesterday, weekAgo }, availableDates: allDates };
 }
 
 // Page performance — sessions + ATC% by landing page, broken down by source, for a date range.

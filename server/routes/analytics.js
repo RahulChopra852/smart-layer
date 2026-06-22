@@ -68,9 +68,9 @@ router.get('/visitors', async (req, res) => {
 });
 
 router.get('/products', async (req, res) => {
-  const { limit } = req.query;
+  const { limit, date } = req.query;
   try {
-    res.json(await getProductInsights(limit ? parseInt(limit, 10) : 40));
+    res.json(await getProductInsights(limit ? parseInt(limit, 10) : 40, date || null));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

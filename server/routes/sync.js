@@ -59,7 +59,7 @@ router.post('/init', async (req, res) => {
 // POST /api/sync/rebuild/:tab — clears a tab, resets watermark, and re-syncs from source.
 router.post('/rebuild/:tab', async (req, res) => {
   const tab = req.params.tab;
-  const sourceMap = { cro_daily: ['cro_web', 'cro_app'], meta_reports: [] };
+  const sourceMap = { cro_daily: ['cro_web', 'cro_app'], meta_reports: [], page_sessions: ['shopify_sessions'] };
   const sources = sourceMap[tab];
   if (!sources) return res.status(404).json({ error: `No rebuild supported for tab: ${tab}` });
   try {

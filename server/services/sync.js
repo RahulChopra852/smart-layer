@@ -3,7 +3,8 @@ import { fetchOrdersSince, fetchPageSessionsSince } from './shopify.js';
 import { fetchCroWebSince, fetchCroAppSince, fetchWebVitalsSince, extractCommentsAsRcaCandidates } from './croSheets.js';
 import { addInferredNotes } from './rca.js';
 
-const DEFAULT_START_DATE = '2025-10-01'; // matches earliest known data per existing dashboard skill
+const DEFAULT_START_DATE = '2025-10-01';
+const SESSIONS_START_DATE = '2026-06-21';
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -23,14 +24,15 @@ async function syncShopifyOrders() {
 
 async function syncShopifySessions() {
   const state = await getSyncState('shopify_sessions');
-  const since = state?.last_synced_date || DEFAULT_START_DATE;
+  const since = state?.last_synced_date || SESSIONS_START_DATE;
   const rows = await fetchPageSessionsSince(since);
 
   await appendRows('page_sessions', rows);
-  const latestDate = rows.length ? rows.map(r => r[0]).sort().slice(-1)[0] : null;
+  const dates = rows.map(r => r[0]).filter(Boolean).sort();
+  const latestDate = dates.length ? dates[dates.length - 1] : null;
   if (latestDate) await setSyncState('shopify_sessions', latestDate);
 
-  return { source: 'shopify_sessions', rowsAdded: rows.length, since };
+  return { source: 'shopify_sessions', rowsAdded: rows.length, latestDate, since };
 }
 
 async function syncCroWeb() {
