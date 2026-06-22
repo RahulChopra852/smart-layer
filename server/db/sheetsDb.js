@@ -25,6 +25,7 @@ export const TAB_SCHEMAS = {
     'lpv', 'link_clicks', 'hook_rate'
   ],
   rca_notes: ['id', 'date', 'source', 'metric_tag', 'note', 'created_at'],
+  alerts: ['id', 'created_at', 'type', 'metric', 'current_value', 'previous_value', 'change_pct', 'threshold', 'status', 'message'],
   _sync_state: ['source', 'last_synced_date', 'last_synced_at']
 };
 

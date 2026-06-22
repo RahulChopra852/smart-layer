@@ -5,6 +5,7 @@ import {
 import { readRows } from '../db/sheetsDb.js';
 import { fetchAnomalies, fetchDailyVisitors } from '../services/croSheets.js';
 import { getAppOverview, getWebOverview } from '../services/ga.js';
+import { getAlerts } from '../services/alerts.js';
 
 const router = express.Router();
 
@@ -104,6 +105,15 @@ router.get('/ga-web', async (req, res) => {
 router.get('/meta-reports', async (req, res) => {
   try {
     res.json({ reports: await readRows('meta_reports') });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/alerts', async (req, res) => {
+  const { limit } = req.query;
+  try {
+    res.json({ alerts: await getAlerts(limit ? parseInt(limit, 10) : 50) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
