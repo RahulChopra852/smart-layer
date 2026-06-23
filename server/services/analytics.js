@@ -91,7 +91,17 @@ export async function getProductInsights(limit = 40, selectedDate = null) {
   if (rows.length === 0) return { products: [], dates: {}, availableDates: [] };
 
   const allDates = [...new Set(rows.map(r => r.date))].sort();
-  const today = selectedDate && allDates.includes(selectedDate) ? selectedDate : allDates[allDates.length - 1];
+
+  let today;
+  if (selectedDate && allDates.includes(selectedDate)) {
+    today = selectedDate;
+  } else if (selectedDate) {
+    const earlier = allDates.filter(d => d <= selectedDate);
+    today = earlier.length ? earlier[earlier.length - 1] : allDates[allDates.length - 1];
+  } else {
+    today = allDates[allDates.length - 1];
+  }
+
   const todayIdx = allDates.indexOf(today);
   const yesterday = todayIdx > 0 ? allDates[todayIdx - 1] : null;
 

@@ -136,3 +136,68 @@ export async function fetchPageSessionsSince(sinceDate) {
   }
   return rows;
 }
+
+const OOS_KEYWORDS = ['whey', 'plant', 'protein', 'yeast', 'isolate', 'creatine', 'gainer', 'pre-workout'];
+const LOW_STOCK_THRESHOLD = 50;
+
+const INVENTORY_QUERY = `
+  query LowStock($query: String!, $after: String) {
+    products(first: 20, query: $query, after: $after, sortKey: INVENTORY_TOTAL, reverse: true) {
+      edges {
+        node {
+          id
+          title
+          status
+          totalInventory
+          variants(first: 50) {
+            edges {
+              node {
+                id
+                title
+                sku
+                inventoryQuantity
+              }
+            }
+          }
+        }
+      }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+`;
+
+export async function fetchLowStockAlerts() {
+  assertConfigured();
+
+  const alerts = [];
+
+  for (const keyword of OOS_KEYWORDS) {
+    const data = await shopifyGraphQL(INVENTORY_QUERY, {
+      query: `status:active ${keyword}`,
+      after: null,
+    });
+
+    for (const { node: product } of data.products.edges) {
+      for (const { node: variant } of product.variants.edges) {
+        if (variant.inventoryQuantity < LOW_STOCK_THRESHOLD && !(variant.sku || '').toUpperCase().includes('-CS')) {
+          alerts.push({
+            product_id: product.id,
+            product_title: product.title,
+            variant_title: variant.title,
+            sku: variant.sku,
+            qty: variant.inventoryQuantity,
+            total_inventory: product.totalInventory,
+          });
+        }
+      }
+    }
+  }
+
+  const seen = new Set();
+  return alerts.filter(a => {
+    const key = `${a.product_id}|${a.variant_title}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).sort((a, b) => a.qty - b.qty);
+}

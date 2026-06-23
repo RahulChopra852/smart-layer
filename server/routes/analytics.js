@@ -6,6 +6,7 @@ import { readRows } from '../db/sheetsDb.js';
 import { fetchAnomalies, fetchDailyVisitors } from '../services/croSheets.js';
 import { getAppOverview, getWebOverview } from '../services/ga.js';
 import { getAlerts } from '../services/alerts.js';
+import { fetchLowStockAlerts } from '../services/shopify.js';
 
 const router = express.Router();
 
@@ -114,6 +115,14 @@ router.get('/alerts', async (req, res) => {
   const { limit } = req.query;
   try {
     res.json({ alerts: await getAlerts(limit ? parseInt(limit, 10) : 50) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/low-stock', async (req, res) => {
+  try {
+    res.json({ alerts: await fetchLowStockAlerts() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
