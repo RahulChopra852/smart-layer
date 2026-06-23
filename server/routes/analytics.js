@@ -120,6 +120,42 @@ router.get('/alerts', async (req, res) => {
   }
 });
 
+router.get('/vwo-campaigns', async (req, res) => {
+  try {
+    res.json({ campaigns: await readRows('vwo_campaigns') });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/vwo-campaigns', async (req, res) => {
+  const { campaigns } = req.body;
+  if (!campaigns?.length) return res.status(400).json({ error: 'campaigns array required' });
+  try {
+    const { clearTab, appendRows } = await import('../db/sheetsDb.js');
+    await clearTab('vwo_campaigns');
+    const rows = campaigns.map(c => [
+      c.id, c.name, c.status, c.started, c.goal, c.type, c.visitors,
+      c.control_conv, c.control_visitors, c.control_rate, c.control_rpv,
+      c.var_conv, c.var_visitors, c.var_rate, c.var_rpv,
+      c.improvement, c.confidence, c.variations || 2, new Date().toISOString()
+    ]);
+    await appendRows('vwo_campaigns', rows);
+    res.json({ ok: true, count: rows.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/psi-daily', async (req, res) => {
+  try {
+    const rows = await readRows('psi_daily');
+    res.json({ entries: rows.sort((a, b) => (b.date || '').localeCompare(a.date || '')) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/low-stock', async (req, res) => {
   try {
     res.json({ alerts: await fetchLowStockAlerts() });
