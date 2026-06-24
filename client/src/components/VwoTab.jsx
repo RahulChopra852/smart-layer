@@ -165,7 +165,7 @@ export default function VwoTab() {
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead>
+              <thead className="sticky top-0 z-[2] bg-card">
                 <tr className="border-b border-border">
                   <th className="text-left text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Campaign</th>
                   <th className="text-left text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Status</th>

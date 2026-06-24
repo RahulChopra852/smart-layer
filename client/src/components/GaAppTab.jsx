@@ -44,7 +44,7 @@ function CompareTable({ title, selected, compare, label1, label2 }) {
     <div className="bg-card border border-border rounded-lg p-4">
       <h3 className="text-sm font-semibold text-text-primary mb-3">{title}</h3>
       <table className="w-full">
-        <thead>
+        <thead className="sticky top-0 z-[2] bg-card">
           <tr className="border-b border-border">
             <th className="text-left text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Metric</th>
             <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">{label1}</th>
@@ -201,7 +201,7 @@ export default function GaAppTab({ start, end }) {
         <h2 className="text-base font-semibold text-text-primary mb-3">Daily Breakdown</h2>
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead>
+            <thead className="sticky top-0 z-[2] bg-card">
               <tr className="border-b border-border">
                 {['Date', 'Active Users', 'New Users', 'Sessions', 'Engaged', 'Screen Views', 'Android Users', 'Android New', 'iOS Users', 'iOS New'].map(h => (
                   <th key={h} className={`text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3 ${h === 'Date' ? 'text-left' : 'text-right'}`}>{h}</th>
@@ -237,7 +237,7 @@ export default function GaAppTab({ start, end }) {
           <h2 className="text-base font-semibold text-text-primary mb-3">Top Events</h2>
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead>
+              <thead className="sticky top-0 z-[2] bg-card">
                 <tr className="border-b border-border">
                   <th className="text-left text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Event</th>
                   <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Count</th>
@@ -261,7 +261,7 @@ export default function GaAppTab({ start, end }) {
           <h2 className="text-base font-semibold text-text-primary mb-3">Top Screens</h2>
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead>
+              <thead className="sticky top-0 z-[2] bg-card">
                 <tr className="border-b border-border">
                   <th className="text-left text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Screen</th>
                   <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Views</th>

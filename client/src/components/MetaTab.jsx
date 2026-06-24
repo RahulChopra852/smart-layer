@@ -7,16 +7,6 @@ function fmt(n) { if (n == null || isNaN(n)) return '—'; return n.toLocaleStri
 function inr(n) { if (n == null || isNaN(n)) return '—'; return `₹${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`; }
 function pctD(n) { if (n == null || isNaN(n)) return '—'; return `${n.toFixed(2)}%`; }
 
-function Delta({ value, suffix = '%', invert = false }) {
-  if (value == null || isNaN(value)) return null;
-  const pos = invert ? value < 0 : value > 0;
-  const neg = invert ? value > 0 : value < 0;
-  return (
-    <span className={`text-[11px] font-medium ${pos ? 'text-positive' : neg ? 'text-negative' : 'text-text-muted'}`}>
-      {value > 0 ? '+' : ''}{value.toFixed(1)}{suffix}
-    </span>
-  );
-}
 
 function UploadForm({ onUploaded }) {
   const [uploading, setUploading] = useState(false);
@@ -125,94 +115,101 @@ function generateInsights(campaigns) {
   return { winners, losers, lowLcToLpv, funnelLeaks, highCpp, scalable, lowHook };
 }
 
-function DodComparison({ dayData, availableDays, selectedDay, compareDay, onSelectDay, onSelectCompare }) {
-  const curr = dayData[selectedDay] || {};
-  const prev = dayData[compareDay] || {};
+function DailyAdAnalysis({ dayData, availableDays }) {
+  const allAds = new Map();
+  for (const day of availableDays) {
+    for (const c of dayData[day]?.campaigns || []) {
+      const adName = c.ad_name || c.campaign_name;
+      const key = `${c.campaign_name}|||${adName}`;
+      if (!allAds.has(key)) allAds.set(key, { name: adName, campaign: c.campaign_name, days: {} });
+      allAds.get(key).days[day] = c;
+    }
+  }
 
-  const metrics = [
-    { label: 'Spend', curr: pf(curr.total?.amount_spent), prev: pf(prev.total?.amount_spent), f: inr, inv: true },
-    { label: 'Purchases', curr: pf(curr.total?.website_purchases), prev: pf(prev.total?.website_purchases), f: fmt },
-    { label: 'ROAS', curr: pf(curr.total?.roas), prev: pf(prev.total?.roas), f: v => `${fmt(v)}x` },
-    { label: 'CVR', curr: x100(curr.total?.cvr_pct), prev: x100(prev.total?.cvr_pct), f: pctD },
-    { label: 'CPP', curr: pf(curr.total?.cost_per_purchase), prev: pf(prev.total?.cost_per_purchase), f: inr, inv: true },
-    { label: 'AOV', curr: pf(curr.total?.aov), prev: pf(prev.total?.aov), f: inr },
-    { label: 'LC→LPV', curr: x100(curr.total?.lc_to_lpv), prev: x100(prev.total?.lc_to_lpv), f: pctD },
-    { label: 'LPV→A2C', curr: x100(curr.total?.lpv_to_a2c), prev: x100(prev.total?.lpv_to_a2c), f: pctD },
-    { label: 'A2C→CI', curr: x100(curr.total?.a2c_to_ci), prev: x100(prev.total?.a2c_to_ci), f: pctD },
-    { label: 'CI→Order', curr: x100(curr.total?.ci_to_order), prev: x100(prev.total?.ci_to_order), f: pctD },
-    { label: 'Hook Rate', curr: pf(curr.total?.hook_rate), prev: pf(prev.total?.hook_rate), f: pctD },
-    { label: 'CPM', curr: pf(curr.total?.cpm), prev: pf(prev.total?.cpm), f: inr, inv: true },
+  const ads = [...allAds.values()].map(ad => {
+    const totalSpend = availableDays.reduce((s, d) => s + (pf(ad.days[d]?.amount_spent) || 0), 0);
+    const totalPurchases = availableDays.reduce((s, d) => s + (pf(ad.days[d]?.website_purchases) || 0), 0);
+    const totalRevenue = availableDays.reduce((s, d) => {
+      const dc = ad.days[d];
+      return s + ((pf(dc?.website_purchases) || 0) * (pf(dc?.aov) || 0));
+    }, 0);
+    const totalRoas = totalSpend > 0 ? totalRevenue / totalSpend : null;
+    const totalCpp = totalPurchases > 0 ? totalSpend / totalPurchases : null;
+    return { ...ad, totalSpend, totalPurchases, totalRoas, totalCpp };
+  }).sort((a, b) => b.totalSpend - a.totalSpend);
+
+  const [metric, setMetric] = useState('amount_spent');
+  const metricOpts = [
+    { key: 'amount_spent', label: 'Spend', f: inr },
+    { key: 'website_purchases', label: 'Purchases', f: fmt },
+    { key: 'roas', label: 'ROAS', f: v => `${fmt(v)}x` },
+    { key: 'cost_per_purchase', label: 'CPP', f: inr },
+    { key: 'ctr_all', label: 'CTR', f: pctD },
+    { key: 'hook_rate', label: 'Hook Rate', f: pctD },
   ];
-
-  // Campaign on/off
-  const currNames = new Set((curr.campaigns || []).map(c => c.campaign_name));
-  const prevNames = new Set((prev.campaigns || []).map(c => c.campaign_name));
-  const switchedOn = [...currNames].filter(n => !prevNames.has(n));
-  const switchedOff = [...prevNames].filter(n => !currNames.has(n));
+  const activeMeta = metricOpts.find(m => m.key === metric);
 
   return (
     <div className="bg-card border border-border rounded-lg p-4">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-base font-semibold text-text-primary">Day-over-Day Comparison</h2>
-      </div>
-
-      <div className="flex items-center gap-3 mb-4">
-        <div className="flex gap-1.5 flex-wrap">
-          {availableDays.map(d => (
-            <button key={'s' + d} onClick={() => onSelectDay(d)}
-              className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
-                d === selectedDay ? 'bg-accent text-white border-accent' : 'bg-bg text-text-secondary border-border hover:border-accent/50'
-              }`}>
-              {d.slice(5)}
-            </button>
-          ))}
+        <div>
+          <h2 className="text-base font-semibold text-text-primary">Ad Analysis — Daily Breakdown</h2>
+          <p className="text-xs text-text-muted mt-0.5">Per-ad performance across {availableDays.length} days with totals</p>
         </div>
-        <span className="text-xs text-text-muted">vs</span>
         <div className="flex gap-1.5 flex-wrap">
-          {availableDays.map(d => (
-            <button key={'c' + d} onClick={() => onSelectCompare(d)}
-              disabled={d === selectedDay}
+          {metricOpts.map(m => (
+            <button key={m.key} onClick={() => setMetric(m.key)}
               className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
-                d === compareDay ? 'bg-warning text-white border-warning'
-                  : d === selectedDay ? 'bg-border/30 text-text-muted border-border cursor-not-allowed'
-                  : 'bg-bg text-text-secondary border-border hover:border-warning/50'
+                metric === m.key ? 'bg-accent text-white border-accent' : 'bg-bg text-text-secondary border-border hover:border-accent/50'
               }`}>
-              {d.slice(5)}
+              {m.label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* On/Off */}
-      {(switchedOn.length > 0 || switchedOff.length > 0) && (
-        <div className="flex flex-wrap gap-1.5 mb-4">
-          {switchedOn.map(n => (
-            <span key={n} className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-positive/10 text-positive" title={n}>
-              ON: {n.length > 45 ? n.slice(0, 45) + '…' : n}
-            </span>
-          ))}
-          {switchedOff.map(n => (
-            <span key={n} className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-negative/10 text-negative" title={n}>
-              OFF: {n.length > 45 ? n.slice(0, 45) + '…' : n}
-            </span>
-          ))}
-        </div>
-      )}
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead className="sticky top-0 z-[2] bg-card">
+            <tr className="border-b border-border">
+              <th className="text-left text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2 sticky left-0 bg-card z-10 min-w-[200px]">Ad / Campaign</th>
+              {availableDays.map(d => (
+                <th key={d} className="text-right text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2 whitespace-nowrap">{d.slice(5)}</th>
+              ))}
+              <th className="text-right text-[10px] font-semibold text-accent uppercase tracking-wider py-2 px-2 whitespace-nowrap border-l border-border">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ads.map(ad => {
+              const totalVal = metric === 'amount_spent' ? ad.totalSpend
+                : metric === 'website_purchases' ? ad.totalPurchases
+                : metric === 'roas' ? ad.totalRoas
+                : metric === 'cost_per_purchase' ? ad.totalCpp
+                : null;
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {metrics.map(m => {
-          const d = m.curr != null && m.prev != null && m.prev !== 0 ? ((m.curr - m.prev) / m.prev * 100) : null;
-          return (
-            <div key={m.label} className="bg-bg rounded-md p-3 border border-border/50">
-              <div className="text-[10px] text-text-muted uppercase mb-0.5">{m.label}</div>
-              <div className="text-sm font-bold text-text-primary">{m.f(m.curr)}</div>
-              <div className="flex items-center justify-between mt-1">
-                <span className="text-[10px] text-text-muted">was {m.f(m.prev)}</span>
-                <Delta value={d} invert={m.inv} />
-              </div>
-            </div>
-          );
-        })}
+              return (
+                <tr key={ad.name} className="border-b border-border/50 hover:bg-bg transition-colors">
+                  <td className="py-2.5 px-2 text-xs text-text-primary max-w-[240px] truncate sticky left-0 bg-card z-10" title={`${ad.name}\n${ad.campaign}`}>
+                    <div className="truncate font-medium">{ad.name}</div>
+                    {ad.campaign !== ad.name && <div className="truncate text-[10px] text-text-muted">{ad.campaign}</div>}
+                  </td>
+                  {availableDays.map(d => {
+                    const dc = ad.days[d];
+                    const val = dc ? pf(dc[metric]) : null;
+                    return (
+                      <td key={d} className={`py-2.5 px-2 text-xs text-right ${val == null ? 'text-text-muted' : 'text-text-secondary'}`}>
+                        {val != null ? activeMeta.f(val) : '—'}
+                      </td>
+                    );
+                  })}
+                  <td className="py-2.5 px-2 text-xs text-right font-semibold text-text-primary border-l border-border">
+                    {totalVal != null ? activeMeta.f(totalVal) : '—'}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -277,7 +274,7 @@ function CampaignTable({ campaigns }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full">
-        <thead>
+        <thead className="sticky top-0 z-[2] bg-card">
           <tr className="border-b border-border">
             {cols.map(c => (
               <th key={c.h} className={`text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2 whitespace-nowrap ${c.align === 'left' ? 'text-left' : 'text-right'}`}>{c.h}</th>
@@ -315,6 +312,114 @@ function CampaignTable({ campaigns }) {
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function NewAdsLaunched({ dayData, availableDays }) {
+  const [expandedDays, setExpandedDays] = useState({});
+  const toggle = (day) => setExpandedDays(prev => ({ ...prev, [day]: !prev[day] }));
+
+  const adFirstSeen = new Map();
+  for (const day of availableDays) {
+    for (const c of dayData[day]?.campaigns || []) {
+      const adName = c.ad_name || c.campaign_name;
+      const key = `${c.campaign_name}|||${adName}`;
+      if (!adFirstSeen.has(key)) {
+        adFirstSeen.set(key, {
+          ad: adName, campaign: c.campaign_name, launchDay: day,
+          spend: pf(c.amount_spent) || 0, purchases: pf(c.website_purchases) || 0,
+          roas: pf(c.roas), cpp: pf(c.cost_per_purchase), aov: pf(c.aov),
+          hookRate: pf(c.hook_rate), ctr: pf(c.ctr_all),
+        });
+      }
+    }
+  }
+  const byDay = {};
+  for (const [, info] of adFirstSeen) {
+    if (!byDay[info.launchDay]) byDay[info.launchDay] = [];
+    byDay[info.launchDay].push(info);
+  }
+  const days = Object.keys(byDay).sort().reverse();
+
+  return (
+    <div className="bg-card border border-border rounded-lg p-4">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-base font-semibold text-text-primary">New Ads Launched</h2>
+          <p className="text-xs text-text-muted mt-0.5">Click a date to expand campaign details</p>
+        </div>
+        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-positive/15 text-positive">
+          {adFirstSeen.size} total ads
+        </span>
+      </div>
+      <div className="max-h-[600px] overflow-auto">
+        <table className="w-full">
+          <thead className="sticky top-0 z-[3] bg-card">
+            <tr className="border-b border-border">
+              <th className="text-left text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2 bg-card">Launch Date</th>
+              <th className="text-left text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2 bg-card">Ad / Campaign</th>
+              <th className="text-right text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2 bg-card">Spend</th>
+              <th className="text-right text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2 bg-card">Purchases</th>
+              <th className="text-right text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2 bg-card">ROAS</th>
+              <th className="text-right text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2 bg-card">CPP</th>
+              <th className="text-right text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2 bg-card">AOV</th>
+              <th className="text-right text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2 bg-card">CTR</th>
+              <th className="text-right text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2 bg-card">Hook</th>
+            </tr>
+          </thead>
+          <tbody>
+            {days.flatMap(day => {
+              const dayAds = byDay[day].sort((a, b) => b.spend - a.spend);
+              const campaigns = new Set(dayAds.map(a => a.campaign));
+              const totalSpend = dayAds.reduce((s, a) => s + a.spend, 0);
+              const totalPurchases = dayAds.reduce((s, a) => s + a.purchases, 0);
+              const isOpen = expandedDays[day];
+              return [
+                <tr key={`${day}-summary`} className="bg-accent/5 border-b border-accent/20 cursor-pointer hover:bg-accent/10 transition-colors" onClick={() => toggle(day)}>
+                  <td className="py-2.5 px-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-text-muted text-sm">{isOpen ? '▼' : '▶'}</span>
+                      <span className="text-xs font-bold text-white bg-accent px-2.5 py-1 rounded-md inline-block">{day}</span>
+                    </div>
+                  </td>
+                  <td colSpan={8} className="py-2.5 px-2">
+                    <div className="flex items-center gap-4">
+                      <span className="text-xs font-medium text-accent">{campaigns.size} campaigns</span>
+                      <span className="text-[10px] text-text-muted">|</span>
+                      <span className="text-xs font-medium text-text-primary">{dayAds.length} ads</span>
+                      <span className="text-[10px] text-text-muted">|</span>
+                      <span className="text-xs text-text-secondary">Spend: <span className="font-semibold text-text-primary">{inr(totalSpend)}</span></span>
+                      <span className="text-[10px] text-text-muted">|</span>
+                      <span className="text-xs text-text-secondary">Purchases: <span className="font-semibold text-text-primary">{fmt(totalPurchases)}</span></span>
+                    </div>
+                  </td>
+                </tr>,
+                ...(isOpen ? dayAds.map((ad, i) => (
+                  <tr key={`${day}-${i}`} className="border-b border-border/30 hover:bg-bg transition-colors">
+                    <td className="py-2 px-2 whitespace-nowrap">
+                      <span className="text-[10px] text-text-muted pl-5">{day.slice(5)}</span>
+                    </td>
+                    <td className="py-2 px-2 max-w-[280px]">
+                      <div className="text-xs text-text-primary truncate" title={ad.ad}>{ad.ad}</div>
+                      <div className="text-[10px] text-text-muted truncate" title={ad.campaign}>{ad.campaign}</div>
+                    </td>
+                    <td className="py-2 px-2 text-xs text-right text-text-secondary">{inr(ad.spend)}</td>
+                    <td className="py-2 px-2 text-xs text-right font-medium text-text-primary">{fmt(ad.purchases)}</td>
+                    <td className={`py-2 px-2 text-xs text-right font-semibold ${ad.roas != null && ad.roas >= 3 ? 'text-positive' : ad.roas != null && ad.roas < 1.5 ? 'text-negative' : 'text-text-secondary'}`}>
+                      {ad.roas != null ? `${fmt(ad.roas)}x` : '—'}
+                    </td>
+                    <td className={`py-2 px-2 text-xs text-right ${ad.cpp != null && ad.cpp > 1000 ? 'text-negative' : 'text-text-secondary'}`}>{ad.cpp != null ? inr(ad.cpp) : '—'}</td>
+                    <td className="py-2 px-2 text-xs text-right text-text-secondary">{ad.aov != null ? inr(ad.aov) : '—'}</td>
+                    <td className="py-2 px-2 text-xs text-right text-text-secondary">{ad.ctr != null ? pctD(ad.ctr) : '—'}</td>
+                    <td className="py-2 px-2 text-xs text-right text-text-secondary">{ad.hookRate != null ? pctD(ad.hookRate) : '—'}</td>
+                  </tr>
+                )) : [])
+              ];
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -372,10 +477,8 @@ export default function MetaTab() {
   }, [reports]);
 
   const [selectedDay, setSelectedDay] = useState(null);
-  const [compareDay, setCompareDay] = useState(null);
 
   const activeDay = selectedDay || availableDays[availableDays.length - 1];
-  const activeCompare = compareDay || availableDays[availableDays.length - 2] || null;
 
   const activeDayData = dayData[activeDay];
 
@@ -424,18 +527,6 @@ export default function MetaTab() {
         )}
       </div>
 
-      {/* DoD Comparison with date picker */}
-      {availableDays.length >= 2 && activeCompare && (
-        <DodComparison
-          dayData={dayData}
-          availableDays={availableDays}
-          selectedDay={activeDay}
-          compareDay={activeCompare}
-          onSelectDay={setSelectedDay}
-          onSelectCompare={setCompareDay}
-        />
-      )}
-
       {/* Insights */}
       {insights && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -447,6 +538,11 @@ export default function MetaTab() {
           <InsightCard title="Ready to Scale" emoji="🚀" items={insights.scalable} color="text-accent" />
           <InsightCard title="Low Hook Rate (<20%)" emoji="🎣" items={insights.lowHook} color="text-warning" />
         </div>
+      )}
+
+      {/* New Ads Launched — by date */}
+      {availableDays.length >= 1 && (
+        <NewAdsLaunched dayData={dayData} availableDays={availableDays} />
       )}
 
       {/* Campaign table for selected day */}

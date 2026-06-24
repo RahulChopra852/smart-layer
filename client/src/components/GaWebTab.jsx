@@ -77,7 +77,7 @@ export default function GaWebTab({ start, end }) {
         <h2 className="text-base font-semibold text-text-primary mb-3">Daily Breakdown</h2>
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead>
+            <thead className="sticky top-0 z-[2] bg-card">
               <tr className="border-b border-border">
                 {['Date', 'Active Users', 'New Users', 'Sessions', 'Engaged', 'Bounce Rate', 'Avg Duration', 'Page Views', 'Conversions'].map(h => (
                   <th key={h} className={`text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3 ${h === 'Date' ? 'text-left' : 'text-right'}`}>{h}</th>
@@ -112,7 +112,7 @@ export default function GaWebTab({ start, end }) {
           <h2 className="text-base font-semibold text-text-primary mb-3">Traffic Channels</h2>
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead>
+              <thead className="sticky top-0 z-[2] bg-card">
                 <tr className="border-b border-border">
                   <th className="text-left text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Channel</th>
                   <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Sessions</th>
@@ -140,7 +140,7 @@ export default function GaWebTab({ start, end }) {
           <h2 className="text-base font-semibold text-text-primary mb-3">Top Sources</h2>
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead>
+              <thead className="sticky top-0 z-[2] bg-card">
                 <tr className="border-b border-border">
                   <th className="text-left text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Source</th>
                   <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Sessions</th>
@@ -168,7 +168,7 @@ export default function GaWebTab({ start, end }) {
         <h2 className="text-base font-semibold text-text-primary mb-3">Top Pages</h2>
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead>
+            <thead className="sticky top-0 z-[2] bg-card">
               <tr className="border-b border-border">
                 <th className="text-left text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Page</th>
                 <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Views</th>

@@ -20,8 +20,12 @@ export function parseMetaReport(fileBuffer) {
 
   const col = (r, ...candidates) => {
     for (const c of candidates) {
-      const key = Object.keys(r).find(k => k.trim().toLowerCase().startsWith(c.toLowerCase()));
-      if (key && r[key] !== undefined) return r[key];
+      const cl = c.toLowerCase();
+      // Prefer exact match, fall back to startsWith
+      const exact = Object.keys(r).find(k => k.trim().toLowerCase() === cl);
+      if (exact && r[exact] !== undefined) return r[exact];
+      const prefix = Object.keys(r).find(k => k.trim().toLowerCase().startsWith(cl));
+      if (prefix && r[prefix] !== undefined) return r[prefix];
     }
     return '';
   };
@@ -38,7 +42,7 @@ export function parseMetaReport(fileBuffer) {
     toNumOrNull(col(r, 'CPC')),
     toNumOrNull(col(r, 'CTR (link')),
     toNumOrNull(col(r, 'Cost per lan', 'Cost per landing')),
-    toNumOrNull(col(r, 'Cost per pur', 'Cost per purchase')),
+    toNumOrNull(col(r, 'Cost per purchase', 'Cost per purchase (INR)')),
     toNumOrNull(col(r, 'AOV')),
     toNumOrNull(col(r, 'LC TO LPV', 'LC to LPV')),
     toNumOrNull(col(r, 'LPV to A2C')),
@@ -47,11 +51,12 @@ export function parseMetaReport(fileBuffer) {
     toNumOrNull(col(r, 'CI to ORDER', 'CI to Order')),
     toNumOrNull(col(r, 'Website check', 'Website checkouts')),
     toNumOrNull(col(r, 'Website pur', 'Website purchases')),
-    toNumOrNull(col(r, 'ROAS')),
+    toNumOrNull(col(r, 'ROAS Custom', 'ROAS')),
     toNumOrNull(col(r, 'Conversion')),
     toNumOrNull(col(r, 'Landing page', 'Landing page views')),
     toNumOrNull(col(r, 'Link clicks')),
     toNumOrNull(col(r, 'Hook Rate', 'Hook rate')),
+    toNumOrNull(col(r, 'Cost per purchase_new', 'Cost per purchase_new_customer')),
   ];
 
   const accountTotalRow = records[0]['Campaign name'] || col(records[0], 'Campaign name') ? null : toRow(records[0]);
