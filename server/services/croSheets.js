@@ -254,6 +254,85 @@ export async function fetchAnomalies(sinceDate) {
     }));
 }
 
+export async function fetchCroWebForDate(date) {
+  const sheets = await getSheetsClient();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SOURCE_SPREADSHEET_ID,
+    range: `'CRO-Auto'!A1:AC10000`
+  });
+  const values = res.data.values || [];
+  if (values.length < 2) return null;
+
+  const headerRow = values[0];
+  const colIndex = (label) => headerRow.findIndex(h => (h || '').trim().toLowerCase() === label.toLowerCase());
+  const idx = {
+    date: colIndex('Date'), sessions: colIndex('Sessions'), webSess: colIndex('Web Sess'),
+    appSess: colIndex('App Sess'), atc: colIndex('ATC'), ic: colIndex('IC'), rpp: colIndex('RPP'),
+    orders: colIndex('Total Orders'), webOrders: colIndex('Web Orders'), appOrders: colIndex('App Orders'),
+    atcPct: colIndex('ATC%'), icPct: colIndex('IC%'), rppPct: colIndex('RPP%'),
+    cvrPct: colIndex('Total CVR'), webCvr: colIndex('Web CVR'), appCvr: colIndex('App CVR'),
+    atcToCi: colIndex('ATC to CI'), ciToRpp: colIndex('CI to RPP'), rppToOrd: colIndex('RPP to Ord'),
+    comment: colIndex('Comments')
+  };
+
+  for (let i = 2; i < values.length; i++) {
+    const row = values[i];
+    if (!row || !row[idx.date]) continue;
+    const d = parseDateCell(row[idx.date]);
+    if (d === date) {
+      return [
+        d, 'web',
+        toNum(row[idx.sessions]), toNum(row[idx.webSess]), toNum(row[idx.appSess]),
+        toNum(row[idx.atc]), toNum(row[idx.ic]), toNum(row[idx.rpp]),
+        toNum(row[idx.orders]), toNum(row[idx.webOrders]), toNum(row[idx.appOrders]),
+        toNum(row[idx.atcPct]), toNum(row[idx.icPct]), toNum(row[idx.rppPct]),
+        toNum(row[idx.cvrPct]), toNum(row[idx.webCvr]), toNum(row[idx.appCvr]),
+        toNum(row[idx.atcToCi]), toNum(row[idx.ciToRpp]), toNum(row[idx.rppToOrd]),
+        idx.comment !== -1 ? (row[idx.comment] || '') : ''
+      ];
+    }
+  }
+  return null;
+}
+
+export async function fetchCroAppForDate(date) {
+  const sheets = await getSheetsClient();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SOURCE_SPREADSHEET_ID,
+    range: `'Funnel(App)'!A2:R10000`
+  });
+  const values = res.data.values || [];
+  if (values.length < 2) return null;
+
+  const headerRow = values[0];
+  const colIndex = (label) => headerRow.findIndex(h => (h || '').trim().toLowerCase() === label.toLowerCase());
+  const idx = {
+    date: colIndex('Date'), sessions: colIndex('Sessions'), atc: colIndex('ATC'), ic: colIndex('IC'),
+    rpp: colIndex('RPP'), orders: colIndex('Orders (App)'), atcPct: colIndex('ATC%'), icPct: colIndex('IC%'),
+    rppPct: colIndex('RPP%'), cvrPct: colIndex('CVR%'), atcToCi: colIndex('atc to ci'),
+    ciToRpp: colIndex('ci to rpp'), rppToOrd: colIndex('rpp to order')
+  };
+
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    if (!row || !row[idx.date]) continue;
+    const d = parseDateCell(row[idx.date]);
+    if (d === date) {
+      return [
+        d, 'app',
+        toNum(row[idx.sessions]), null, null,
+        toNum(row[idx.atc]), toNum(row[idx.ic]), toNum(row[idx.rpp]),
+        toNum(row[idx.orders]), null, null,
+        toNum(row[idx.atcPct]), toNum(row[idx.icPct]), toNum(row[idx.rppPct]), toNum(row[idx.cvrPct]),
+        null, null,
+        toNum(row[idx.atcToCi]), toNum(row[idx.ciToRpp]), toNum(row[idx.rppToOrd]),
+        ''
+      ];
+    }
+  }
+  return null;
+}
+
 // Extracts dated comments from already-fetched CRO web rows — feeds the RCA inferred-notes layer.
 // Operates on the row arrays produced by fetchCroWebSince (date is index 0, comment is last index).
 export function extractCommentsAsRcaCandidates(croWebRows) {

@@ -128,6 +128,42 @@ export async function readRows(tabName) {
   });
 }
 
+export async function deleteRowsByDate(tabName, date, channelCol = null, channelVal = null) {
+  const sheets = await getSheetsClient();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `${tabName}!A2:ZZ`
+  });
+  const cols = TAB_SCHEMAS[tabName];
+  const dateIdx = cols.indexOf('date');
+  const chanIdx = channelCol ? cols.indexOf(channelCol) : -1;
+  const values = res.data.values || [];
+  const rowsToDelete = [];
+  for (let i = values.length - 1; i >= 0; i--) {
+    const row = values[i];
+    if (row[dateIdx] === date && (chanIdx === -1 || row[chanIdx] === channelVal)) {
+      rowsToDelete.push(i);
+    }
+  }
+  if (rowsToDelete.length === 0) return 0;
+
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
+  const sheet = meta.data.sheets.find(s => s.properties.title === tabName);
+  const sheetId = sheet.properties.sheetId;
+
+  const requests = rowsToDelete.map(i => ({
+    deleteDimension: {
+      range: { sheetId, dimension: 'ROWS', startIndex: i + 1, endIndex: i + 2 }
+    }
+  }));
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: SPREADSHEET_ID,
+    requestBody: { requests }
+  });
+  return rowsToDelete.length;
+}
+
 export async function getSyncState(source) {
   const rows = await readRows('_sync_state');
   return rows.find(r => r.source === source) || null;

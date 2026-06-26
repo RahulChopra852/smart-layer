@@ -1,6 +1,7 @@
 import express from 'express';
 import { runFullSync, syncShopifyOrders, syncShopifySessions, syncCroWeb, syncCroApp, syncWebVitals, syncGaApp } from '../services/sync.js';
-import { ensureTabs, readRows, clearTab, setSyncState } from '../db/sheetsDb.js';
+import { ensureTabs, readRows, clearTab, setSyncState, appendRows, deleteRowsByDate } from '../db/sheetsDb.js';
+import { fetchCroWebForDate, fetchCroAppForDate } from '../services/croSheets.js';
 
 const router = express.Router();
 
@@ -9,6 +10,33 @@ router.post('/all', async (req, res) => {
   try {
     const results = await runFullSync();
     res.json({ results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/sync/cro-date — re-syncs CRO data for specific dates
+router.post('/cro-date', async (req, res) => {
+  const { dates, channels } = req.body;
+  if (!dates?.length) return res.status(400).json({ error: 'dates array required' });
+  const chans = channels || ['web', 'app'];
+  try {
+    const results = [];
+    for (const date of dates) {
+      for (const ch of chans) {
+        const deleted = await deleteRowsByDate('cro_daily', date, 'channel', ch);
+        let row = null;
+        if (ch === 'web') row = await fetchCroWebForDate(date);
+        else if (ch === 'app') row = await fetchCroAppForDate(date);
+        if (row) {
+          await appendRows('cro_daily', [row]);
+          results.push({ date, channel: ch, status: 'synced', deleted });
+        } else {
+          results.push({ date, channel: ch, status: 'not_found_in_source', deleted });
+        }
+      }
+    }
+    res.json({ ok: true, results });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
