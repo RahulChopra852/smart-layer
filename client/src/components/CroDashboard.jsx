@@ -2,6 +2,127 @@ import { useState } from 'react';
 import CroFunnel from './CroFunnel';
 import PagePerformance from './PagePerformance';
 import RcaNotes from './RcaNotes';
+import { useApi } from '../hooks/useApi';
+
+function fmt(n) { return n != null ? n.toLocaleString() : '—'; }
+function pct(n) { if (n == null || isNaN(n)) return '—'; return `${n.toFixed(1)}%`; }
+
+function WeeklyFunnel({ start, end }) {
+  const { data, loading, error } = useApi(`/api/analytics/cro-funnel-deltas?start=${start}&end=${end}`);
+
+  if (loading) return <div className="bg-card border border-border rounded-lg p-4"><div className="flex items-center justify-center py-8 text-xs text-text-muted gap-2"><div className="w-3.5 h-3.5 border-2 border-border border-t-accent rounded-full animate-spin" />Loading funnel...</div></div>;
+  if (error || !data) return null;
+
+  const channels = [
+    { key: 'web', label: 'Web', rows: data.web || [] },
+    { key: 'app', label: 'App', rows: data.app || [] },
+  ];
+
+  return (
+    <div className="bg-card border border-border rounded-lg p-4">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-base font-semibold text-text-primary">7-Day Funnel Trend</h2>
+          <p className="text-xs text-text-muted mt-0.5">Daily Sessions → ATC → CI → RPP → Orders</p>
+        </div>
+        <span className="text-[10px] text-text-muted">{start} to {end}</span>
+      </div>
+
+      {channels.map(ch => {
+        const rows = ch.rows.filter(r => r.sessions > 0);
+        if (rows.length === 0) return null;
+
+        const totals = rows.reduce((t, r) => {
+          t.sessions += r.sessions || 0;
+          t.atc += r.atc || 0;
+          t.ic += r.ic || 0;
+          t.rpp += r.rpp || 0;
+          t.orders += r.orders || 0;
+          return t;
+        }, { sessions: 0, atc: 0, ic: 0, rpp: 0, orders: 0 });
+
+        const steps = [
+          { label: 'Sessions', key: 'sessions' },
+          { label: 'ATC', key: 'atc' },
+          { label: 'CI', key: 'ic' },
+          { label: 'RPP', key: 'rpp' },
+          { label: 'Orders', key: 'orders' },
+        ];
+
+        return (
+          <div key={ch.key} className="mb-4 last:mb-0">
+            <div className="flex items-center gap-2 mb-3">
+              <h3 className="text-sm font-semibold text-text-primary">{ch.label}</h3>
+              <div className="flex-1 h-px bg-border/50" />
+              {/* Period totals as pills */}
+              <div className="flex gap-1.5">
+                {steps.map(s => (
+                  <span key={s.key} className="text-[10px] text-text-muted bg-bg px-2 py-0.5 rounded-full border border-border/50">
+                    {s.label}: <span className="font-semibold text-text-primary">{fmt(totals[s.key])}</span>
+                    {s.key !== 'sessions' && totals.sessions > 0 && (
+                      <span className="text-accent ml-0.5">({(totals[s.key] / totals.sessions * 100).toFixed(1)}%)</span>
+                    )}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="sticky top-0 z-[2] bg-card">
+                  <tr className="border-b border-border">
+                    <th className="text-left text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2 bg-card">Date</th>
+                    {steps.map(s => (
+                      <th key={s.key} className="text-right text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2 bg-card">{s.label}</th>
+                    ))}
+                    <th className="text-right text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2 bg-card">ATC%</th>
+                    <th className="text-right text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2 bg-card">CI%</th>
+                    <th className="text-right text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2 bg-card">RPP%</th>
+                    <th className="text-right text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2 bg-card">CVR%</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => {
+                    const prev = i > 0 ? rows[i - 1] : null;
+                    const atcPct = r.atc_pct;
+                    const icPct = r.ic_pct;
+                    const rppPct = r.rpp_pct;
+                    const cvrPct = r.cvr_pct;
+                    return (
+                      <tr key={r.date} className="border-b border-border/30 hover:bg-bg transition-colors">
+                        <td className="py-2 px-2 text-xs font-medium text-text-primary whitespace-nowrap">{r.date}</td>
+                        <td className="py-2 px-2 text-xs text-right text-text-secondary">{fmt(r.sessions)}</td>
+                        <td className="py-2 px-2 text-xs text-right text-text-secondary">{fmt(r.atc)}</td>
+                        <td className="py-2 px-2 text-xs text-right text-text-secondary">{fmt(r.ic)}</td>
+                        <td className="py-2 px-2 text-xs text-right text-text-secondary">{fmt(r.rpp)}</td>
+                        <td className="py-2 px-2 text-xs text-right font-medium text-text-primary">{fmt(r.orders)}</td>
+                        <td className={`py-2 px-2 text-xs text-right font-medium ${prev && atcPct != null && prev.atc_pct != null ? (atcPct > prev.atc_pct ? 'text-positive' : atcPct < prev.atc_pct ? 'text-negative' : 'text-text-secondary') : 'text-text-secondary'}`}>{pct(atcPct)}</td>
+                        <td className={`py-2 px-2 text-xs text-right font-medium ${prev && icPct != null && prev.ic_pct != null ? (icPct > prev.ic_pct ? 'text-positive' : icPct < prev.ic_pct ? 'text-negative' : 'text-text-secondary') : 'text-text-secondary'}`}>{pct(icPct)}</td>
+                        <td className={`py-2 px-2 text-xs text-right font-medium ${prev && rppPct != null && prev.rpp_pct != null ? (rppPct > prev.rpp_pct ? 'text-positive' : rppPct < prev.rpp_pct ? 'text-negative' : 'text-text-secondary') : 'text-text-secondary'}`}>{pct(rppPct)}</td>
+                        <td className={`py-2 px-2 text-xs text-right font-semibold ${prev && cvrPct != null && prev.cvr_pct != null ? (cvrPct > prev.cvr_pct ? 'text-positive' : cvrPct < prev.cvr_pct ? 'text-negative' : 'text-text-secondary') : 'text-text-secondary'}`}>{pct(cvrPct)}</td>
+                      </tr>
+                    );
+                  })}
+                  {/* Totals row */}
+                  <tr className="bg-bg/50 border-t border-border font-semibold">
+                    <td className="py-2 px-2 text-xs text-text-primary">Total</td>
+                    {steps.map(s => (
+                      <td key={s.key} className="py-2 px-2 text-xs text-right text-text-primary">{fmt(totals[s.key])}</td>
+                    ))}
+                    <td className="py-2 px-2 text-xs text-right text-accent">{totals.sessions > 0 ? pct(totals.atc / totals.sessions * 100) : '—'}</td>
+                    <td className="py-2 px-2 text-xs text-right text-accent">{totals.sessions > 0 ? pct(totals.ic / totals.sessions * 100) : '—'}</td>
+                    <td className="py-2 px-2 text-xs text-right text-accent">{totals.sessions > 0 ? pct(totals.rpp / totals.sessions * 100) : '—'}</td>
+                    <td className="py-2 px-2 text-xs text-right text-accent font-bold">{totals.sessions > 0 ? pct(totals.orders / totals.sessions * 100) : '—'}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function CroSyncBar({ onSynced }) {
   const [syncing, setSyncing] = useState(false);
@@ -56,6 +177,7 @@ export default function CroDashboard({ start, end }) {
         <CroSyncBar onSynced={() => setRefreshKey(k => k + 1)} />
       </div>
       <CroFunnel start={start} end={end} key={`funnel-${refreshKey}`} />
+      <WeeklyFunnel start={start} end={end} key={`weekly-${refreshKey}`} />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" key={`pages-${refreshKey}`}>
         <PagePerformance start={start} end={end} mode="top" />
         <PagePerformance start={start} end={end} mode="worst" />

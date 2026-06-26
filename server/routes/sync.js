@@ -1,5 +1,5 @@
 import express from 'express';
-import { runFullSync, syncShopifyOrders, syncShopifySessions, syncCroWeb, syncCroApp, syncWebVitals } from '../services/sync.js';
+import { runFullSync, syncShopifyOrders, syncShopifySessions, syncCroWeb, syncCroApp, syncWebVitals, syncGaApp } from '../services/sync.js';
 import { ensureTabs, readRows, clearTab, setSyncState } from '../db/sheetsDb.js';
 
 const router = express.Router();
@@ -20,7 +20,8 @@ const SOURCE_MAP = {
   shopify_sessions: syncShopifySessions,
   cro_web: syncCroWeb,
   cro_app: syncCroApp,
-  webvitals: syncWebVitals
+  webvitals: syncWebVitals,
+  ga_app: syncGaApp
 };
 
 router.post('/:source', async (req, res) => {
@@ -59,7 +60,7 @@ router.post('/init', async (req, res) => {
 // POST /api/sync/rebuild/:tab — clears a tab, resets watermark, and re-syncs from source.
 router.post('/rebuild/:tab', async (req, res) => {
   const tab = req.params.tab;
-  const sourceMap = { cro_daily: ['cro_web', 'cro_app'], meta_reports: [], page_sessions: ['shopify_sessions'] };
+  const sourceMap = { cro_daily: ['cro_web', 'cro_app'], meta_reports: [], page_sessions: ['shopify_sessions'], ga_app_daily: ['ga_app'] };
   const sources = sourceMap[tab];
   if (!sources) return res.status(404).json({ error: `No rebuild supported for tab: ${tab}` });
   try {

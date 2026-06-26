@@ -94,6 +94,24 @@ router.get('/ga-app', async (req, res) => {
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+router.get('/ga-app-stored', async (req, res) => {
+  try {
+    const rows = await readRows('ga_app_daily');
+    const daily = rows.map(r => ({
+      date: r.date,
+      platform: r.platform,
+      activeUsers: parseFloat(r.active_users) || 0,
+      newUsers: parseFloat(r.new_users) || 0,
+      sessions: parseFloat(r.sessions) || 0,
+      engagedSessions: parseFloat(r.engaged_sessions) || 0,
+      screenPageViews: parseFloat(r.screen_page_views) || 0,
+      averageSessionDuration: parseFloat(r.avg_session_duration) || 0,
+      eventCount: parseFloat(r.event_count) || 0,
+    }));
+    res.json({ daily: daily.sort((a, b) => a.date.localeCompare(b.date)) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/ga-web', async (req, res) => {
   const { start, end } = req.query;
   if (!start || !end) return res.status(400).json({ error: 'start and end required' });
