@@ -1,6 +1,33 @@
 import { useState, useCallback } from 'react';
 import { useApi } from '../hooks/useApi';
 
+function SyncButton({ onSynced }) {
+  const [syncing, setSyncing] = useState(false);
+  const [result, setResult] = useState(null);
+
+  async function handleSync() {
+    setSyncing(true); setResult(null);
+    try {
+      const res = await fetch('/api/analytics/vwo-sync', { method: 'POST' });
+      const d = await res.json();
+      if (d.error) throw new Error(d.error);
+      setResult({ ok: true, msg: `${d.count} tests · ${d.running} running` });
+      onSynced?.();
+    } catch (err) { setResult({ ok: false, msg: err.message }); }
+    finally { setSyncing(false); }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <button onClick={handleSync} disabled={syncing}
+        className="px-3 py-1.5 text-xs font-medium rounded-md bg-positive/90 text-white hover:opacity-90 disabled:opacity-50 transition-opacity">
+        {syncing ? 'Syncing...' : 'Sync VWO'}
+      </button>
+      {result && <span className={`text-[10px] ${result.ok ? 'text-positive' : 'text-negative'}`}>{result.msg}</span>}
+    </div>
+  );
+}
+
 const pf = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n; };
 
 function StatusBadge({ status }) {
@@ -97,6 +124,7 @@ export default function VwoTab() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <SyncButton onSynced={handleRefresh} />
             <button onClick={handleRefresh}
               className="px-3 py-1.5 text-xs font-medium rounded-md bg-accent text-white hover:opacity-90 transition-opacity">
               Refresh

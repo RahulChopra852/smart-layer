@@ -110,6 +110,64 @@ export async function fetchOrdersSince(sinceDate) {
   return { dailyRows, productRows, latestDate: dailyRows.length ? dailyRows[dailyRows.length - 1][0] : null };
 }
 
+const HOURLY_ORDERS_QUERY = `
+  query HourlyOrders($q: String!, $after: String) {
+    orders(first: 250, query: $q, after: $after, sortKey: CREATED_AT) {
+      edges {
+        node {
+          createdAt
+          channelInformation { app { title } }
+          currentTotalPriceSet { shopMoney { amount } }
+        }
+      }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+`;
+
+export async function fetchHourlyOrders(date, channel = 'GNC <> Gokwik') {
+  assertConfigured();
+  // Store is IST (UTC+5:30). Convert IST date boundaries to UTC for Shopify API.
+  // IST midnight = previous day 18:30 UTC
+  const istStartUtc = `${date}T00:00:00+05:30`;
+  const startUtc = new Date(istStartUtc).toISOString();
+  const nextDay = new Date(date + 'T12:00:00');
+  nextDay.setDate(nextDay.getDate() + 1);
+  const nextDateStr = nextDay.toISOString().slice(0, 10);
+  const istEndUtc = `${nextDateStr}T00:00:00+05:30`;
+  const endUtc = new Date(istEndUtc).toISOString();
+
+  // hourly buckets in IST (0-23)
+  const hourly = Array.from({ length: 24 }, () => ({ orders: 0, revenue: 0 }));
+  let totalOrders = 0, totalRevenue = 0;
+  let after = null, hasNextPage = true;
+  const q = `created_at:>='${startUtc}' AND created_at:<'${endUtc}'`;
+
+  while (hasNextPage) {
+    const data = await shopifyGraphQL(HOURLY_ORDERS_QUERY, { q, after });
+    const { edges, pageInfo } = data.orders;
+
+    for (const { node } of edges) {
+      const appTitle = node.channelInformation?.app?.title || '';
+      if (appTitle !== channel) continue;
+
+      // Convert UTC createdAt to IST hour
+      const utcDate = new Date(node.createdAt);
+      const istHour = (utcDate.getUTCHours() + 5 + Math.floor((utcDate.getUTCMinutes() + 30) / 60)) % 24;
+      const rev = parseFloat(node.currentTotalPriceSet.shopMoney.amount) || 0;
+      hourly[istHour].orders++;
+      hourly[istHour].revenue += rev;
+      totalOrders++;
+      totalRevenue += rev;
+    }
+
+    hasNextPage = pageInfo.hasNextPage;
+    after = pageInfo.endCursor;
+  }
+
+  return { date, channel, hourly, totalOrders, totalRevenue };
+}
+
 // Sessions by landing page + source, capped at 200 rows per source query.
 export async function fetchPageSessionsSince(sinceDate) {
   assertConfigured();

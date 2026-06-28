@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import CroFunnel from './CroFunnel';
 import PagePerformance from './PagePerformance';
-import RcaNotes from './RcaNotes';
+import DayTrend from './DayTrend';
+import RcaSnapshot, { useRcaProblems } from './RcaSnapshot';
 import { useApi } from '../hooks/useApi';
 
 function fmt(n) { return n != null ? n.toLocaleString() : '—'; }
@@ -311,22 +312,50 @@ function CroSyncBar({ onSynced }) {
   );
 }
 
+function HealthLed() {
+  const problems = useRcaProblems();
+  const count = problems.length;
+  const isGreen = count === 0;
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="relative flex items-center">
+        <div className={`w-3 h-3 rounded-full ${isGreen ? 'bg-positive' : 'bg-negative'}`}>
+          <div className={`absolute inset-0 w-3 h-3 rounded-full ${isGreen ? 'bg-positive' : 'bg-negative'} animate-ping opacity-75`} />
+        </div>
+      </div>
+      {count > 0 && (
+        <div className="flex items-center gap-1 flex-wrap">
+          {problems.map(p => (
+            <span key={p} className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-negative/15 text-negative whitespace-nowrap">{p}</span>
+          ))}
+        </div>
+      )}
+      {isGreen && <span className="text-[10px] text-positive font-medium">All clear</span>}
+    </div>
+  );
+}
+
 export default function CroDashboard({ start, end }) {
   const [refreshKey, setRefreshKey] = useState(0);
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-text-primary">CRO Dashboard</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-base font-semibold text-text-primary">CRO Dashboard</h2>
+          <HealthLed />
+        </div>
         <CroSyncBar onSynced={() => setRefreshKey(k => k + 1)} />
       </div>
+      <RcaSnapshot key={`rca-${refreshKey}`} />
+      <DayTrend key={`daytrend-${refreshKey}`} />
       <CroFunnel start={start} end={end} key={`funnel-${refreshKey}`} />
       <WeeklyFunnel start={start} end={end} key={`weekly-${refreshKey}`} onSynced={() => setRefreshKey(k => k + 1)} />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" key={`pages-${refreshKey}`}>
         <PagePerformance start={start} end={end} mode="top" />
         <PagePerformance start={start} end={end} mode="worst" />
       </div>
-      <RcaNotes start={start} end={end} key={`rca-${refreshKey}`} />
     </div>
   );
 }

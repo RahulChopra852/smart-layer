@@ -12,12 +12,15 @@
 # Frontend: npm run dev (from client/)
 ```
 
-### Start Engines Hook
-Say **"start engines"**, **"start the engines"**, or **"turn on ignition"** to automatically start both dev servers. A race car engine rev sound plays via `[Console]::Beep()` when triggered.
+### Start Engines
+When the user says **"start engines"**, **"start the engines"**, **"switch on engines"**, or **"turn on ignition"**:
+1. Play the sports car engine start sound (macOS: `afplay` or `osascript` beep sequence)
+2. Start both backend (port 3000) and frontend (port 5173)
+3. Confirm with engine-running message
 
-- Hook script: `.claude/hooks/start-engines.ps1`
-- Settings: `.claude/settings.local.json` (UserPromptSubmit hook)
-- The hook checks if ports are already in use before starting
+When the user says **"kill engines"**, **"turn off engines"**, or **"shut down"**:
+1. Stop both servers
+2. Play engine shutdown sound
 
 ## Key Data Sources
 - **CRO source sheet**: `1uj4fNlMkPPqGFuHgJaKyOg__Abi46KB8F-0cq-t4TF4` (tabs: CRO-Auto, Funnel(App))

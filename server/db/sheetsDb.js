@@ -29,6 +29,32 @@ export const TAB_SCHEMAS = {
   psi_daily: ['date', 'page', 'lcp', 'fcp', 'inp', 'cls', 'ttfb', 'speed_index', 'performance', 'lcp_avg3d', 'fcp_avg3d', 'perf_avg3d', 'alerts'],
   alerts: ['id', 'created_at', 'type', 'metric', 'current_value', 'previous_value', 'change_pct', 'threshold', 'status', 'message'],
   ga_app_daily: ['date', 'platform', 'active_users', 'new_users', 'sessions', 'engaged_sessions', 'screen_page_views', 'avg_session_duration', 'event_count'],
+  gokwik_daily: [
+    'date', 'total_orders', 'prepaid_orders', 'cod_orders',
+    'avg_rto_score', 'high_rto_pct',
+    'loyalty_points_redeemed', 'total_discount',
+    'top_coupon', 'coupon_usage_count', 'unique_coupons',
+    'top_utm_source', 'top_utm_medium', 'top_utm_campaign',
+    'new_customers', 'returning_customers',
+    'top_landing_page', 'top_store_source',
+    'synced_at'
+  ],
+  google_ads_daily: [
+    'date', 'total_cost', 'total_impressions', 'total_clicks', 'total_conversions', 'total_conv_value', 'roas',
+    'search_cost', 'search_conv_value', 'search_roas',
+    'pmax_cost', 'pmax_conv_value', 'pmax_roas',
+    'video_cost', 'video_impressions',
+    'app_cost', 'app_conversions',
+    'demandgen_cost', 'demandgen_conv_value',
+    'synced_at'
+  ],
+  google_ads_campaigns: [
+    'date', 'campaign_name', 'campaign_type', 'status', 'budget', 'cost', 'impressions', 'clicks',
+    'conversions', 'conv_value', 'roas', 'cpc', 'conv_rate', 'bid_strategy'
+  ],
+  gokwik_products: ['date', 'product_name', 'order_count', 'quantity', 'revenue', 'payment_prepaid', 'payment_cod', 'avg_rto_score', 'high_rto_pct', 'top_coupon', 'top_utm_source', 'avg_discount'],
+  gokwik_utm: ['date', 'utm_source', 'utm_medium', 'utm_campaign', 'order_count'],
+  gokwik_landing_pages: ['date', 'landing_page', 'order_count', 'top_utm_source'],
   _sync_state: ['source', 'last_synced_date', 'last_synced_at']
 };
 

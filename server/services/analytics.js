@@ -213,6 +213,10 @@ export async function getCroFunnelDeltas(startDate, endDate) {
       for (const k of ['sessions','web_sess','app_sess','atc','ic','rpp','orders','web_orders','app_orders','atc_pct','ic_pct','rpp_pct','cvr_pct','web_cvr','app_cvr','atc_to_ci','ci_to_rpp','rpp_to_ord']) {
         c[k] = pf(curr[k]);
       }
+      // Fix ATC when raw value looks wrong (e.g. 516400 instead of 5164)
+      if (c.atc != null && c.sessions != null && c.atc_pct != null && c.atc > c.sessions) {
+        c.atc = Math.round(c.sessions * c.atc_pct / 100);
+      }
 
       deltas[channel].push({
         date: curr.date,
@@ -221,12 +225,14 @@ export async function getCroFunnelDeltas(startDate, endDate) {
         ic_pct_dod: prev ? safeDelta(c.ic_pct, pf(prev.ic_pct)) : null,
         rpp_pct_dod: prev ? safeDelta(c.rpp_pct, pf(prev.rpp_pct)) : null,
         cvr_pct_dod: prev ? safeDelta(c.cvr_pct, pf(prev.cvr_pct)) : null,
+        web_cvr_dod: prev ? safeDelta(c.web_cvr, pf(prev.web_cvr)) : null,
         sessions_dod: prev ? safeDelta(c.sessions, pf(prev.sessions)) : null,
         orders_dod: prev ? safeDelta(c.orders, pf(prev.orders)) : null,
         atc_pct_wow: weekAgo ? safeDelta(c.atc_pct, pf(weekAgo.atc_pct)) : null,
         ic_pct_wow: weekAgo ? safeDelta(c.ic_pct, pf(weekAgo.ic_pct)) : null,
         rpp_pct_wow: weekAgo ? safeDelta(c.rpp_pct, pf(weekAgo.rpp_pct)) : null,
         cvr_pct_wow: weekAgo ? safeDelta(c.cvr_pct, pf(weekAgo.cvr_pct)) : null,
+        web_cvr_wow: weekAgo ? safeDelta(c.web_cvr, pf(weekAgo.web_cvr)) : null,
         sessions_wow: weekAgo ? safeDelta(c.sessions, pf(weekAgo.sessions)) : null,
         orders_wow: weekAgo ? safeDelta(c.orders, pf(weekAgo.orders)) : null,
       });

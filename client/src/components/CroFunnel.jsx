@@ -26,7 +26,7 @@ function pickLatest(rows) {
   if (!rows || rows.length === 0) return null;
   for (let i = rows.length - 1; i >= 0; i--) {
     const r = rows[i];
-    if (r.sessions > 0 && r.atc > 0 && r.atc < r.sessions && r.ic != null && r.ic > 0) return r;
+    if (r.sessions > 0) return r;
   }
   return rows[rows.length - 1];
 }
@@ -88,27 +88,28 @@ function generateAnalysis(today, yesterday, allRows) {
   return { up, down, dates };
 }
 
-// SVG line chart
+// SVG line chart with date-wise values
 function TrendChart({ rows, metricKey, label, color = '#6366F1' }) {
   if (!rows || rows.length < 2) return null;
-  const values = rows.map(r => parseFloat(r[metricKey])).filter(v => !isNaN(v));
-  if (values.length < 2) return null;
+  const dataPoints = rows
+    .map(r => ({ date: r.date, v: parseFloat(r[metricKey]) }))
+    .filter(d => !isNaN(d.v));
+  if (dataPoints.length < 2) return null;
 
-  const w = 320, h = 80, pad = 4;
+  const values = dataPoints.map(d => d.v);
+  const w = 320, h = 100, pad = 4, topPad = 14;
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min || 1;
 
-  const points = values.map((v, i) => {
-    const x = pad + (i / (values.length - 1)) * (w - pad * 2);
-    const y = h - pad - ((v - min) / range) * (h - pad * 2);
-    return { x, y, v };
+  const points = dataPoints.map((d, i) => {
+    const x = pad + (i / (dataPoints.length - 1)) * (w - pad * 2);
+    const y = topPad + (h - topPad - pad) - ((d.v - min) / range) * (h - topPad - pad);
+    return { x, y, v: d.v, date: d.date };
   });
 
   const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
   const areaPath = `${linePath} L${points[points.length - 1].x},${h - pad} L${points[0].x},${h - pad} Z`;
-
-  const dates = rows.map(r => r.date).filter(Boolean);
 
   return (
     <div>
@@ -116,7 +117,7 @@ function TrendChart({ rows, metricKey, label, color = '#6366F1' }) {
         <span className="text-[10px] font-medium text-text-muted uppercase tracking-wide">{label}</span>
         <span className="text-xs font-semibold" style={{ color }}>{values[values.length - 1].toFixed(1)}%</span>
       </div>
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full" style={{ height: 80 }}>
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full" style={{ height: 100 }}>
         <defs>
           <linearGradient id={`grad-${metricKey}-${color.replace('#','')}`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={color} stopOpacity="0.15" />
@@ -126,12 +127,21 @@ function TrendChart({ rows, metricKey, label, color = '#6366F1' }) {
         <path d={areaPath} fill={`url(#grad-${metricKey}-${color.replace('#','')})`} />
         <path d={linePath} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         {points.map((p, i) => (
-          <circle key={i} cx={p.x} cy={p.y} r={i === points.length - 1 ? 3.5 : 2} fill={i === points.length - 1 ? color : 'white'} stroke={color} strokeWidth="1.5" />
+          <g key={i}>
+            <circle cx={p.x} cy={p.y} r={i === points.length - 1 ? 3.5 : 2} fill={i === points.length - 1 ? color : 'white'} stroke={color} strokeWidth="1.5" />
+            <text x={p.x} y={p.y - 6} textAnchor="middle" fontSize="7" fill={color} fontWeight="600">{p.v.toFixed(1)}</text>
+          </g>
         ))}
       </svg>
       <div className="flex justify-between mt-0.5">
-        <span className="text-[9px] text-text-muted">{dates[0]?.slice(5)}</span>
-        <span className="text-[9px] text-text-muted">{dates[dates.length - 1]?.slice(5)}</span>
+        {points.length <= 10 ? points.map((p, i) => (
+          <span key={i} className="text-[8px] text-text-muted" style={{ flex: 'none' }}>{p.date?.slice(5)}</span>
+        )) : (
+          <>
+            <span className="text-[9px] text-text-muted">{points[0]?.date?.slice(5)}</span>
+            <span className="text-[9px] text-text-muted">{points[points.length - 1]?.date?.slice(5)}</span>
+          </>
+        )}
       </div>
     </div>
   );
@@ -154,14 +164,15 @@ function FunnelStep({ label, value, rate, isLast }) {
   );
 }
 
-function ChannelCard({ title, latest, allRows, sessionKey, visitors }) {
+function ChannelCard({ title, latest, allRows, sessionKey, cvrKey = 'cvr_pct', visitors }) {
   if (!latest) return <p className="text-xs text-text-muted py-4">No data available</p>;
 
   const sessions = latest[sessionKey] ?? latest.sessions;
-  if (sessions == null || sessions === 0) return <p className="text-xs text-text-muted py-4">No session data</p>;
+  const noData = sessions == null || sessions === 0;
 
+  const cvr = latest[cvrKey];
   const yesterday = allRows && allRows.length >= 2 ? allRows[allRows.length - 2] : null;
-  const analysis = generateAnalysis(latest, yesterday, allRows);
+  const analysis = noData ? { up: [], down: [], dates: {} } : generateAnalysis(latest, yesterday, allRows);
 
   return (
     <div className="flex flex-col gap-4">
@@ -169,25 +180,35 @@ function ChannelCard({ title, latest, allRows, sessionKey, visitors }) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
-          {latest.cvr_pct != null && (
-            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${latest.cvr_pct >= 3 ? 'bg-positive/15 text-positive' : 'bg-accent/15 text-accent'}`}>
-              CVR {pct(latest.cvr_pct)}
+          {!noData && cvr != null && (
+            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${cvr >= 3 ? 'bg-positive/15 text-positive' : 'bg-accent/15 text-accent'}`}>
+              CVR {pct(cvr)}
+            </span>
+          )}
+          {noData && (
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-warning/15 text-warning">
+              No data
             </span>
           )}
         </div>
         <span className="text-[10px] text-text-muted">{latest.date}</span>
       </div>
 
+      {noData && (
+        <p className="text-xs text-text-muted py-4 text-center">Source sheet not updated for {latest.date} — check Funnel(App) tab</p>
+      )}
+
       {/* Funnel — clean horizontal */}
-      <div className="flex items-start bg-bg rounded-lg p-3 border border-border/50">
+      {!noData && <div className="flex items-start bg-bg rounded-lg p-3 border border-border/50">
         <FunnelStep label="Sessions" value={sessions} />
         <FunnelStep label="ATC" value={latest.atc} rate={latest.atc_pct} />
         <FunnelStep label="IC" value={latest.ic} rate={latest.ic_pct} />
         <FunnelStep label="RPP" value={latest.rpp} rate={latest.rpp_pct} />
         <FunnelStep label="Orders" value={latest.orders} isLast />
-      </div>
+      </div>}
 
       {/* Visitors + Orders breakdown */}
+      {!noData && <>
       <div className="flex gap-2">
         {visitors != null && (
           <div className="flex-1 bg-bg rounded-md p-2 border border-border/50 text-center">
@@ -223,7 +244,7 @@ function ChannelCard({ title, latest, allRows, sessionKey, visitors }) {
       {allRows && allRows.length >= 2 && (
         <div className="grid grid-cols-2 gap-3">
           <TrendChart rows={allRows} metricKey="atc_pct" label="ATC %" color="#6366F1" />
-          <TrendChart rows={allRows} metricKey="cvr_pct" label="CVR %" color="#10B981" />
+          <TrendChart rows={allRows} metricKey={cvrKey} label="CVR %" color="#10B981" />
           <TrendChart rows={allRows} metricKey="ic_pct" label="IC %" color="#3B82F6" />
           <TrendChart rows={allRows} metricKey="rpp_pct" label="RPP %" color="#F59E0B" />
         </div>
@@ -246,7 +267,7 @@ function ChannelCard({ title, latest, allRows, sessionKey, visitors }) {
               { label: 'ATC %', val: pct(latest.atc_pct), dod: latest.atc_pct_dod, wow: latest.atc_pct_wow, sf: 'pt' },
               { label: 'IC %', val: pct(latest.ic_pct), dod: latest.ic_pct_dod, wow: latest.ic_pct_wow, sf: 'pt' },
               { label: 'RPP %', val: pct(latest.rpp_pct), dod: latest.rpp_pct_dod, wow: latest.rpp_pct_wow, sf: 'pt' },
-              { label: 'CVR %', val: pct(latest.cvr_pct), dod: latest.cvr_pct_dod, wow: latest.cvr_pct_wow, sf: 'pt' },
+              { label: 'CVR %', val: pct(cvr), dod: latest[cvrKey + '_dod'] ?? latest.cvr_pct_dod, wow: latest[cvrKey + '_wow'] ?? latest.cvr_pct_wow, sf: 'pt' },
               { label: 'Orders', val: fmt(latest.orders), dod: latest.orders_dod, wow: latest.orders_wow, sf: '' },
             ].map(m => (
               <tr key={m.label} className="border-b border-border/20 last:border-0">
@@ -309,6 +330,7 @@ function ChannelCard({ title, latest, allRows, sessionKey, visitors }) {
           </div>
         )}
       </div>
+      </>}
     </div>
   );
 }
@@ -317,7 +339,11 @@ export default function CroFunnel({ start, end }) {
   const { data, loading, error } = useApi(`/api/analytics/cro-funnel-deltas?start=${start}&end=${end}`);
 
   const webLatest = pickLatest(data?.web);
-  const appLatest = pickLatest(data?.app);
+  // Use same date as web for app so both cards align
+  const webDate = webLatest?.date;
+  const appLatest = webDate
+    ? (data?.app?.find(r => r.date === webDate) || pickLatest(data?.app))
+    : pickLatest(data?.app);
 
   const visitorDate = webLatest?.date || null;
   const { data: visitorData } = useApi(
@@ -344,7 +370,7 @@ export default function CroFunnel({ start, end }) {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
           <div className="border border-border rounded-lg p-4">
-            <ChannelCard title="Web" latest={webLatest} allRows={data?.web} sessionKey="web_sess" visitors={visitorData?.visitors} />
+            <ChannelCard title="Web" latest={webLatest} allRows={data?.web} sessionKey="web_sess" cvrKey="web_cvr" visitors={visitorData?.visitors} />
           </div>
           <div className="border border-border rounded-lg p-4">
             <ChannelCard title="App" latest={appLatest} allRows={data?.app} sessionKey="sessions" />

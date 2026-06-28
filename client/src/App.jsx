@@ -8,16 +8,22 @@ import VwoTab from './components/VwoTab';
 import MetaTab from './components/MetaTab';
 import GaAppTab from './components/GaAppTab';
 import GaWebTab from './components/GaWebTab';
+import GokwikTab from './components/GokwikTab';
+import GoogleAdsTab from './components/GoogleAdsTab';
+import SummaryTab from './components/SummaryTab';
 import SyncStatus from './components/SyncStatus';
 import HomePage from './components/HomePage';
 import ChatWidget from './components/ChatWidget';
 
 const TABS = [
+  { id: 'summary', label: 'Summary' },
   { id: 'cro', label: 'CRO' },
+  { id: 'gokwik', label: 'GoKwik' },
   { id: 'ga-app', label: 'GA - App' },
   { id: 'ga-web', label: 'GA - Web' },
   { id: 'vitals', label: 'Web Vitals' },
   { id: 'products', label: 'Products' },
+  { id: 'google-ads', label: 'Google Ads' },
   { id: 'meta', label: 'Meta Ads' },
   { id: 'anomalies', label: 'Anomalies' },
   { id: 'abtests', label: 'AB Tests' },
@@ -91,15 +97,18 @@ export default function App() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-4" key={refreshKey}>
+        {tab === 'summary' && <SummaryTab onNavigate={handleNavigate} />}
         {tab === 'cro' && <CroDashboard start={start} end={end} />}
         {tab === 'ga-app' && <GaAppTab start={start} end={end} />}
         {tab === 'ga-web' && <GaWebTab start={start} end={end} />}
         {tab === 'vitals' && <WebVitalsTab start={start} end={end} />}
         {tab === 'products' && <ProductsTab start={start} end={end} />}
+        {tab === 'google-ads' && <GoogleAdsTab />}
         {tab === 'meta' && <MetaTab />}
         {tab === 'anomalies' && <AnomaliesTab start={start} />}
         {tab === 'abtests' && <AbTestsTab start={start} end={end} />}
         {tab === 'vwo' && <VwoTab />}
+        {tab === 'gokwik' && <GokwikTab />}
       </main>
       <ChatWidget />
     </div>

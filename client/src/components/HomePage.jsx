@@ -247,6 +247,179 @@ function SpaceCanvas() {
   return <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-0" />;
 }
 
+function RotatingMoon() {
+  const canvasRef = useRef(null);
+  const textureRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const size = 450;
+    canvas.width = size;
+    canvas.height = size;
+    const cx = size / 2, cy = size / 2, radius = size / 2 - 8;
+
+    // Generate a procedural moon texture on an offscreen canvas
+    const texW = 1024, texH = 512;
+    const texCanvas = document.createElement('canvas');
+    texCanvas.width = texW;
+    texCanvas.height = texH;
+    const tCtx = texCanvas.getContext('2d');
+
+    // Base gray surface
+    const baseGrad = tCtx.createLinearGradient(0, 0, texW, texH);
+    baseGrad.addColorStop(0, '#B0AAA0');
+    baseGrad.addColorStop(0.5, '#A8A298');
+    baseGrad.addColorStop(1, '#9A9488');
+    tCtx.fillStyle = baseGrad;
+    tCtx.fillRect(0, 0, texW, texH);
+
+    // Maria (dark seas)
+    const maria = [
+      { x: 320, y: 180, rx: 120, ry: 80, color: '#706860' },
+      { x: 520, y: 220, rx: 90, ry: 70, color: '#686058' },
+      { x: 200, y: 280, rx: 100, ry: 60, color: '#787068' },
+      { x: 700, y: 160, rx: 80, ry: 90, color: '#6E6660' },
+      { x: 450, y: 350, rx: 110, ry: 50, color: '#747068' },
+      { x: 150, y: 140, rx: 70, ry: 55, color: '#726A62' },
+      { x: 600, y: 330, rx: 60, ry: 45, color: '#6C6458' },
+      { x: 850, y: 250, rx: 95, ry: 65, color: '#706860' },
+    ];
+    for (const m of maria) {
+      const g = tCtx.createRadialGradient(m.x, m.y, 0, m.x, m.y, Math.max(m.rx, m.ry));
+      g.addColorStop(0, m.color);
+      g.addColorStop(0.7, m.color + '88');
+      g.addColorStop(1, 'transparent');
+      tCtx.fillStyle = g;
+      tCtx.beginPath();
+      tCtx.ellipse(m.x, m.y, m.rx, m.ry, 0, 0, Math.PI * 2);
+      tCtx.fill();
+    }
+
+    // Craters with rims
+    for (let i = 0; i < 200; i++) {
+      const x = Math.random() * texW;
+      const y = Math.random() * texH;
+      const r = Math.random() * 15 + 2;
+      const brightness = Math.random() * 30 - 15;
+      // Dark interior
+      const cg = tCtx.createRadialGradient(x + r * 0.2, y + r * 0.2, 0, x, y, r);
+      cg.addColorStop(0, `rgba(${80 + brightness}, ${75 + brightness}, ${68 + brightness}, 0.6)`);
+      cg.addColorStop(0.7, `rgba(${90 + brightness}, ${85 + brightness}, ${78 + brightness}, 0.3)`);
+      cg.addColorStop(1, 'transparent');
+      tCtx.fillStyle = cg;
+      tCtx.beginPath();
+      tCtx.arc(x, y, r, 0, Math.PI * 2);
+      tCtx.fill();
+      // Bright rim on upper-left
+      if (r > 5) {
+        tCtx.beginPath();
+        tCtx.arc(x, y, r, Math.PI * 0.8, Math.PI * 1.8);
+        tCtx.strokeStyle = `rgba(200, 195, 185, ${0.15 + Math.random() * 0.15})`;
+        tCtx.lineWidth = r * 0.15;
+        tCtx.stroke();
+      }
+    }
+
+    // Ray systems (bright streaks from large craters)
+    for (let i = 0; i < 8; i++) {
+      const ox = Math.random() * texW;
+      const oy = Math.random() * texH;
+      const rayCount = Math.floor(Math.random() * 6) + 4;
+      for (let r = 0; r < rayCount; r++) {
+        const angle = (r / rayCount) * Math.PI * 2 + Math.random() * 0.5;
+        const len = Math.random() * 60 + 20;
+        tCtx.beginPath();
+        tCtx.moveTo(ox, oy);
+        tCtx.lineTo(ox + Math.cos(angle) * len, oy + Math.sin(angle) * len);
+        tCtx.strokeStyle = `rgba(190, 185, 175, ${0.08 + Math.random() * 0.06})`;
+        tCtx.lineWidth = Math.random() * 2 + 0.5;
+        tCtx.stroke();
+      }
+    }
+
+    // Noise texture for surface roughness
+    const imgData = tCtx.getImageData(0, 0, texW, texH);
+    for (let i = 0; i < imgData.data.length; i += 4) {
+      const noise = (Math.random() - 0.5) * 12;
+      imgData.data[i] += noise;
+      imgData.data[i + 1] += noise;
+      imgData.data[i + 2] += noise;
+    }
+    tCtx.putImageData(imgData, 0, 0);
+    textureRef.current = texCanvas;
+
+    // Pre-compute sphere lookup table (which pixel maps to which lat/lon)
+    const sphereMap = [];
+    for (let py = 0; py < size; py++) {
+      for (let px = 0; px < size; px++) {
+        const dx = (px - cx) / radius;
+        const dy = (py - cy) / radius;
+        const dist2 = dx * dx + dy * dy;
+        if (dist2 > 1) { sphereMap.push(null); continue; }
+        const dz = Math.sqrt(1 - dist2);
+        const lat = Math.asin(dy);
+        const lonBase = Math.atan2(dx, dz);
+        const light = Math.max(0, dz * 0.5 + dx * 0.3 - dy * 0.2 + 0.45);
+        const limbDark = 1 - dist2 * 0.25;
+        const v = Math.floor((lat / Math.PI + 0.5) * texH) % texH;
+        sphereMap.push({ lonBase, v, light: light * limbDark });
+      }
+    }
+
+    const tData = tCtx.getImageData(0, 0, texW, texH).data;
+    let animId, frameCount = 0;
+
+    function draw(t) {
+      frameCount++;
+      if (frameCount % 3 !== 0 && frameCount > 1) { animId = requestAnimationFrame(draw); return; }
+
+      const rotation = t * 0.00008;
+      const imgOut = ctx.createImageData(size, size);
+      const out = imgOut.data;
+
+      for (let i = 0; i < sphereMap.length; i++) {
+        const s = sphereMap[i];
+        if (!s) continue;
+        let u = Math.floor(((s.lonBase + rotation) / Math.PI + 1) / 2 * texW) % texW;
+        if (u < 0) u += texW;
+        const ti = (s.v * texW + u) * 4;
+        const idx = i * 4;
+        out[idx] = Math.min(255, (tData[ti] || 160) * s.light);
+        out[idx + 1] = Math.min(255, (tData[ti + 1] || 155) * s.light);
+        out[idx + 2] = Math.min(255, (tData[ti + 2] || 148) * s.light);
+        out[idx + 3] = 255;
+      }
+
+      ctx.putImageData(imgOut, 0, 0);
+
+      const atmo = ctx.createRadialGradient(cx, cy, radius * 0.92, cx, cy, radius * 1.12);
+      atmo.addColorStop(0, 'rgba(200, 210, 240, 0)');
+      atmo.addColorStop(0.5, 'rgba(180, 195, 230, 0.08)');
+      atmo.addColorStop(1, 'rgba(140, 160, 210, 0)');
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius * 1.12, 0, Math.PI * 2);
+      ctx.fillStyle = atmo;
+      ctx.fill();
+
+      animId = requestAnimationFrame(draw);
+    }
+    animId = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(animId);
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute pointer-events-none"
+      style={{
+        width: 450, height: 450,
+        filter: 'drop-shadow(0 0 50px rgba(180, 190, 220, 0.3))',
+      }}
+    />
+  );
+}
+
 function FloatingCard({ tab, index, total, onNavigate, mousePos }) {
   const cardRef = useRef(null);
   const [hovered, setHovered] = useState(false);
@@ -396,20 +569,15 @@ export default function HomePage({ onNavigate }) {
 
       {/* Center hub */}
       <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none">
-        {/* Pulsing rings */}
-        <div className="absolute">
-          <div className="w-48 h-48 rounded-full border border-accent/10 animate-[ping_3s_ease-in-out_infinite]" />
-        </div>
-        <div className="absolute">
-          <div className="w-64 h-64 rounded-full border border-accent/5 animate-[ping_4s_ease-in-out_infinite_0.5s]" />
+        {/* Moon behind everything */}
+        <div className={`absolute transition-all duration-[2000ms] ease-out ${mounted ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
+          style={{ marginTop: '-20px' }}>
+          <RotatingMoon />
         </div>
 
-        {/* Logo area */}
+        {/* Logo area — on top of moon */}
         <div className={`relative transition-all duration-1000 ease-out ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
           <div className="relative">
-            {/* Glow behind text */}
-            <div className="absolute inset-0 blur-3xl bg-accent/20 rounded-full scale-150" />
-
             <h1 className="relative text-6xl font-black tracking-tight text-white drop-shadow-[0_0_30px_rgba(129,140,248,0.5)]">
               <span className="bg-gradient-to-r from-indigo-300 via-purple-300 to-pink-300 bg-clip-text text-transparent">
                 GNC
