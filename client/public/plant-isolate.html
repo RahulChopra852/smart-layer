@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>GNC AMP Superfood Plant Isolate</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{--r:#cc0000;--rg:rgba(204,0,0,.25);--w:#fff;--bg:#f8f7f4;--g1:#f0efec;--g2:#e0ddd8;--t:#1a1a1a;--tb:#444;--tm:#888}
+html{scroll-behavior:smooth}
+body{font-family:'Inter',sans-serif;background:var(--w);color:var(--t);overflow-x:hidden}
+
+/* Preloader */
+.loader{position:fixed;inset:0;background:var(--w);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;transition:opacity .5s,visibility .5s}
+.loader.done{opacity:0;visibility:hidden;pointer-events:none}
+.loader h2{font-family:'Space Grotesk',sans-serif;font-size:3.5rem;font-weight:900;color:var(--r);letter-spacing:-2px}
+.loader span{font-size:.65rem;color:var(--tm);text-transform:uppercase;letter-spacing:5px}
+.lbar{width:120px;height:2px;background:var(--g1);border-radius:2px;overflow:hidden}
+.lfill{height:100%;background:var(--r);width:0}
+
+/* Nav */
+nav{position:fixed;top:0;left:0;right:0;padding:14px 40px;display:flex;align-items:center;justify-content:space-between;z-index:900;background:rgba(255,255,255,.92);backdrop-filter:blur(16px);border-bottom:1px solid rgba(0,0,0,.04);transform:translateY(-100%);opacity:0}
+.nlogo{height:28px}
+.nlinks{display:flex;gap:24px;list-style:none}
+.nlinks a{color:var(--tb);text-decoration:none;font-size:.75rem;font-weight:600;letter-spacing:1px;text-transform:uppercase;transition:color .3s}
+.nlinks a:hover{color:var(--r)}
+.nbuy{background:var(--r);color:#fff;padding:10px 24px;border-radius:50px;font-weight:700;font-size:.75rem;text-decoration:none;letter-spacing:1px;text-transform:uppercase;transition:transform .3s,box-shadow .3s}
+.nbuy:hover{transform:scale(1.05);box-shadow:0 6px 20px var(--rg)}
+@media(max-width:900px){.nlinks{display:none}nav{padding:12px 20px}}
+
+/* Buttons */
+.br{background:var(--r);color:#fff;padding:15px 40px;border-radius:60px;font-weight:800;font-size:.85rem;text-decoration:none;text-transform:uppercase;letter-spacing:1px;display:inline-flex;align-items:center;gap:8px;border:none;cursor:pointer;transition:transform .3s,box-shadow .3s}
+.br:hover{transform:scale(1.05);box-shadow:0 10px 30px var(--rg)}
+.bo{border:2px solid var(--t);background:none;color:var(--t);padding:13px 32px;border-radius:60px;font-weight:700;font-size:.85rem;text-decoration:none;text-transform:uppercase;letter-spacing:1px;cursor:pointer;transition:all .3s}
+.bo:hover{border-color:var(--r);color:var(--r)}
+.bw{background:#fff;color:var(--r);padding:15px 40px;border-radius:60px;font-weight:800;font-size:.85rem;text-decoration:none;text-transform:uppercase;letter-spacing:1px;display:inline-flex;align-items:center;gap:8px;border:none;cursor:pointer;transition:transform .3s,box-shadow .3s}
+.bw:hover{transform:scale(1.05);box-shadow:0 10px 30px rgba(0,0,0,.12)}
+.arw{width:15px;height:15px}
+
+/* Hero */
+.hero{min-height:100vh;display:flex;align-items:center;position:relative;overflow:hidden;background:var(--w)}
+.hero-inner{max-width:1400px;margin:0 auto;padding:120px 48px 80px;display:grid;grid-template-columns:1fr 1fr;gap:50px;align-items:center;width:100%}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(204,0,0,.05);border:1px solid rgba(204,0,0,.12);padding:6px 16px;border-radius:50px;font-size:.65rem;font-weight:700;color:var(--r);text-transform:uppercase;letter-spacing:2px;margin-bottom:20px}
+.hero-badge i{width:6px;height:6px;background:var(--r);border-radius:50%;display:inline-block;animation:bk 2s infinite}
+@keyframes bk{0%,100%{opacity:1}50%{opacity:.3}}
+.hero h1{font-family:'Space Grotesk',sans-serif;font-size:clamp(2.5rem,5vw,4.8rem);font-weight:900;line-height:1.05;letter-spacing:-2px;margin-bottom:20px}
+.hero h1 .r{color:var(--r)}
+.hero-p{font-size:1rem;color:var(--tb);line-height:1.8;max-width:460px;margin-bottom:28px}
+.hero-ctas{display:flex;gap:12px;flex-wrap:wrap}
+.hero-right{position:relative;display:flex;align-items:center;justify-content:center}
+.hero-img{width:100%;max-width:380px;display:block;margin:0 auto;filter:drop-shadow(0 30px 50px rgba(0,0,0,.1));position:relative;z-index:2}
+.hero-glow{position:absolute;width:380px;height:380px;border-radius:50%;top:50%;left:50%;transform:translate(-50%,-50%);background:radial-gradient(circle,rgba(204,0,0,.06) 0%,transparent 70%)}
+.ftag{position:absolute;background:#fff;box-shadow:0 4px 20px rgba(0,0,0,.07);border-radius:12px;padding:10px 16px;z-index:3}
+.ftag small{font-size:.58rem;color:var(--tm);text-transform:uppercase;letter-spacing:1px;display:block}
+.ftag strong{font-family:'Space Grotesk',sans-serif;font-size:1rem;font-weight:800;color:var(--r)}
+.ft1{top:8%;right:0}.ft2{bottom:28%;left:-10px}.ft3{top:55%;right:-20px}
+.hpill{position:absolute;bottom:0;left:50%;transform:translateX(-50%);background:var(--r);color:#fff;padding:9px 22px;border-radius:50px;font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:.9rem;z-index:3;box-shadow:0 6px 20px var(--rg);white-space:nowrap}
+.hpill s{opacity:.6;font-weight:400;margin-right:6px}
+@media(max-width:900px){.hero-inner{grid-template-columns:1fr;text-align:center;padding:110px 24px 60px}.hero-p{margin:0 auto 28px}.hero-ctas{justify-content:center}.hero-right{order:-1}.hero-img{max-width:280px}}
+
+/* Marquee */
+.mq{background:var(--r);padding:13px 0;overflow:hidden}
+.mq-t{display:flex;gap:40px;animation:mqa 20s linear infinite;width:max-content}
+@keyframes mqa{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+.mq-i{color:#fff;font-weight:700;font-size:.75rem;text-transform:uppercase;letter-spacing:2px;white-space:nowrap}
+
+/* Section */
+.sec{padding:110px 48px}.wrap{max-width:1400px;margin:0 auto}.bgl{background:var(--bg)}
+.eye{font-size:.68rem;color:var(--r);text-transform:uppercase;letter-spacing:4px;font-weight:700;margin-bottom:10px}
+.sh{font-family:'Space Grotesk',sans-serif;font-size:clamp(1.8rem,3.5vw,3rem);font-weight:900;letter-spacing:-2px;line-height:1.1;margin-bottom:14px}
+.sh .r{color:var(--r)}
+.sp{font-size:.9rem;color:var(--tb);line-height:1.7;max-width:500px;margin-bottom:48px}
+@media(max-width:640px){.sec{padding:70px 20px}}
+
+/* Cards */
+.cgrid{display:grid;gap:18px}
+.c3{grid-template-columns:repeat(3,1fr)}
+.c4{grid-template-columns:repeat(4,1fr)}
+.c2{grid-template-columns:repeat(2,1fr)}
+@media(max-width:900px){.c3,.c4{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:600px){.c3,.c4,.c2{grid-template-columns:1fr}}
+.card{background:#fff;border:1px solid var(--g2);border-radius:20px;padding:36px 28px;transition:transform .4s,border-color .4s,box-shadow .4s}
+.card:hover{transform:translateY(-6px);border-color:rgba(204,0,0,.15);box-shadow:0 12px 40px rgba(204,0,0,.05)}
+.card-ico{width:44px;height:44px;background:rgba(204,0,0,.06);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;font-size:1.2rem}
+.card h3{font-family:'Space Grotesk',sans-serif;font-size:1.05rem;font-weight:700;margin-bottom:6px}
+.card p{font-size:.82rem;color:var(--tb);line-height:1.65}
+
+/* Pour */
+.pour-wrap{height:400vh;position:relative}
+.pour-pin{height:100vh;width:100%;overflow:hidden;background:var(--w);position:relative}
+#pc{position:absolute;inset:0;width:100%;height:100%}
+.pour-txt{position:absolute;top:5%;left:50%;transform:translateX(-50%);z-index:3;text-align:center;width:90%;max-width:500px;opacity:0;transition:opacity .3s,transform .3s}
+.pour-txt.vis{opacity:1;transform:translateX(-50%) translateY(0)}
+.pour-txt h2{font-family:'Space Grotesk',sans-serif;font-size:clamp(1.6rem,3.5vw,2.8rem);font-weight:900;letter-spacing:-2px;margin-bottom:6px}
+.pour-txt h2 .r{color:var(--r)}
+.pour-txt p{font-size:.88rem;color:var(--tb)}
+.pour-dots{position:absolute;right:20px;top:50%;transform:translateY(-50%);z-index:4;display:flex;flex-direction:column;gap:8px}
+.pdot{width:8px;height:8px;border-radius:50%;border:2px solid var(--g2);background:none;transition:all .3s}
+.pdot.on{background:var(--r);border-color:var(--r)}
+.pour-hint{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);z-index:4;color:var(--tm);font-size:.6rem;text-transform:uppercase;letter-spacing:2px;transition:opacity .3s}
+
+/* Source */
+.src-row{display:grid;grid-template-columns:1fr auto 1fr;gap:28px;align-items:center;margin-bottom:40px}
+.src-plus{font-family:'Space Grotesk',sans-serif;font-size:2.2rem;font-weight:900;color:var(--r);text-align:center}
+.src-card{text-align:center}.src-card .e{font-size:2.8rem;margin-bottom:10px;display:block}
+.src-card h3{font-family:'Space Grotesk',sans-serif;font-size:1.15rem;font-weight:800;margin-bottom:6px}
+.src-card p{font-size:.82rem;color:var(--tb);line-height:1.6}
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.stat{background:#fff;border:1px solid var(--g2);border-radius:16px;padding:24px 14px;text-align:center;transition:all .4s}
+.stat:hover{border-color:var(--r);transform:translateY(-3px)}
+.stat b{font-family:'Space Grotesk',sans-serif;font-size:2rem;font-weight:900;color:var(--r);display:block}
+.stat span{font-size:.68rem;color:var(--tm);text-transform:uppercase;letter-spacing:1px;margin-top:4px;display:block}
+@media(max-width:900px){.src-row{grid-template-columns:1fr}.stat-row{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:600px){.stat-row{grid-template-columns:1fr}}
+
+/* Flavors */
+.flv{border-radius:22px;padding:28px 18px 24px;text-align:center;border:1px solid var(--g2);background:#fff;transition:transform .4s;cursor:pointer;position:relative;overflow:hidden}
+.flv:hover{transform:translateY(-8px) scale(1.02)}
+.flv.choc{background:linear-gradient(180deg,#f5ebe0,#fff)}.flv.cof{background:linear-gradient(180deg,#f0e6d8,#fff)}.flv.man{background:linear-gradient(180deg,#fef9e7,#fff)}.flv.van{background:linear-gradient(180deg,#fdf6ec,#fff)}
+.flv img{width:100%;max-width:160px;margin:0 auto 12px;display:block;filter:drop-shadow(0 6px 16px rgba(0,0,0,.07));transition:transform .4s}
+.flv:hover img{transform:scale(1.06) rotate(2deg)}
+.flv h3{font-family:'Space Grotesk',sans-serif;font-size:1.05rem;font-weight:800;margin-bottom:3px}
+.flv small{font-size:.68rem;color:var(--tm);text-transform:uppercase;letter-spacing:2px}
+.fpop{position:absolute;top:12px;right:12px;background:var(--r);color:#fff;font-size:.55rem;font-weight:800;padding:3px 9px;border-radius:50px;text-transform:uppercase;letter-spacing:1px}
+
+/* Pricing */
+.pr-row{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center}
+.pcard{background:#fff;border:2px solid var(--r);border-radius:24px;padding:40px 36px;position:relative}
+.pbadge{display:inline-block;background:var(--r);color:#fff;padding:5px 14px;border-radius:50px;font-size:.7rem;font-weight:800;margin-bottom:16px}
+.pmrp{font-size:.9rem;color:var(--tm);text-decoration:line-through}
+.pprice{font-family:'Space Grotesk',sans-serif;font-size:3.5rem;font-weight:900;letter-spacing:-2px;line-height:1}
+.pprice span{font-size:1.6rem}
+.ppre{font-size:.8rem;color:var(--r);font-weight:600;margin:4px 0 24px}
+.pperks{list-style:none;margin-bottom:28px}
+.pperks li{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--g1);font-size:.82rem;color:var(--tb)}
+.pperks li::before{content:'✓';color:var(--r);font-weight:800}
+.pr-img{width:100%;max-width:300px;display:block;margin:20px auto;border-radius:14px;filter:drop-shadow(0 12px 30px rgba(0,0,0,.08))}
+.promo{background:var(--bg);border:1px dashed var(--r);border-radius:12px;padding:16px;margin-top:16px}
+.promo b{font-family:'Space Grotesk',sans-serif;font-size:1.1rem;color:var(--r);letter-spacing:2px;display:block}
+.promo small{font-size:.75rem;color:var(--tm)}
+@media(max-width:900px){.pr-row{grid-template-columns:1fr}}
+
+/* Nutrition rings */
+.ncard{background:#fff;border:1px solid var(--g2);border-radius:20px;padding:32px 16px;text-align:center;transition:all .4s}
+.ncard:hover{border-color:var(--r);transform:translateY(-4px)}
+.nring{width:90px;height:90px;margin:0 auto 14px;position:relative;display:flex;align-items:center;justify-content:center}
+.nring svg{position:absolute;width:100%;height:100%;transform:rotate(-90deg)}
+.nring circle{fill:none;stroke-width:5}
+.nring .bg{stroke:var(--g1)}
+.nring .fg{stroke:var(--r);stroke-dasharray:251;stroke-dashoffset:251;stroke-linecap:round}
+.nring b{font-family:'Space Grotesk',sans-serif;font-size:1.3rem;font-weight:900}
+.ncard h4{font-size:.8rem;font-weight:600;margin-bottom:2px}
+.ncard small{font-size:.65rem;color:var(--tm);text-transform:uppercase;letter-spacing:1px}
+
+/* Reviews */
+.rev-h{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:44px;flex-wrap:wrap;gap:16px}
+.rev-sc{display:flex;align-items:center;gap:14px}
+.rbig{font-family:'Space Grotesk',sans-serif;font-size:4rem;font-weight:900;color:var(--r);line-height:1}
+.rstars{color:var(--r);font-size:1rem;letter-spacing:2px}
+.rcount{font-size:.78rem;color:var(--tm);margin-top:2px}
+.rcard{background:#fff;border:1px solid var(--g2);border-radius:16px;padding:28px;transition:all .4s}
+.rcard:hover{transform:translateY(-4px);box-shadow:0 10px 30px rgba(0,0,0,.04)}
+.rcard .rs{color:var(--r);font-size:.8rem;margin-bottom:12px}
+.rcard .rt{font-size:.85rem;color:var(--tb);line-height:1.7;margin-bottom:16px}
+.rcard .ra{display:flex;align-items:center;gap:10px}
+.rav{width:34px;height:34px;background:rgba(204,0,0,.06);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.7rem;color:var(--r)}
+.ran{font-weight:700;font-size:.78rem}
+.rab{font-size:.65rem;color:var(--r);font-weight:600}
+
+/* CTA */
+.cta{background:var(--r);padding:100px 48px;text-align:center;position:relative;overflow:hidden}
+.cta h2{font-family:'Space Grotesk',sans-serif;font-size:clamp(2rem,4.5vw,3.5rem);font-weight:900;color:#fff;letter-spacing:-2px;margin-bottom:12px}
+.cta p{font-size:.95rem;color:rgba(255,255,255,.7);max-width:420px;margin:0 auto 32px}
+
+/* Footer */
+footer{padding:36px 48px 20px;border-top:1px solid var(--g2)}
+.foot-in{max-width:1400px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px}
+.flogo{height:24px}
+.flinks{display:flex;gap:18px}
+.flinks a{color:var(--tm);text-decoration:none;font-size:.75rem;transition:color .3s}
+.flinks a:hover{color:var(--r)}
+.fcopy{text-align:center;font-size:.65rem;color:var(--tm);margin-top:20px;padding-top:14px;border-top:1px solid var(--g1);max-width:1400px;margin-left:auto;margin-right:auto}
+</style>
+</head>
+<body>
+
+<!-- Loader -->
+<div class="loader" id="loader">
+  <h2>GNC</h2>
+  <span>Superfood Plant Isolate</span>
+  <div class="lbar"><div class="lfill" id="lfill"></div></div>
+</div>
+
+<!-- Nav -->
+<nav id="nav">
+  <img src="https://www.guardian.in/cdn/shop/files/GNC-red-logo.png?v=1738825812&width=200" alt="GNC" class="nlogo"/>
+  <ul class="nlinks">
+    <li><a href="#feat">Features</a></li>
+    <li><a href="#pour">Experience</a></li>
+    <li><a href="#src">Source</a></li>
+    <li><a href="#flav">Flavors</a></li>
+    <li><a href="#nutr">Nutrition</a></li>
+    <li><a href="#rev">Reviews</a></li>
+  </ul>
+  <a href="https://www.guardian.in/products/gnc-amp-plant-isolate-1" class="nbuy" target="_blank">Buy — ₹1,799</a>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-left">
+      <div class="hero-badge"><i></i> New Formulation 2026</div>
+      <h1>Superfood<br><span class="r">Plant</span> Isolate<br>Protein</h1>
+      <p class="hero-p">25g Plant Protein per scoop · 10.1g EAAs · PDCAAS Score of 1 · DigeZyme® for digestion · Zero maltodextrin &amp; soy-free.</p>
+      <div class="hero-ctas">
+        <a href="https://www.guardian.in/products/gnc-amp-plant-isolate-1" class="br" target="_blank">Shop Now <svg class="arw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg></a>
+        <a href="#pour" class="bo">Watch Pour</a>
+      </div>
+    </div>
+    <div class="hero-right">
+      <div class="hero-glow"></div>
+      <img src="https://www.guardian.in/cdn/shop/files/Chocolate_3.jpg?v=1777960186&width=800" alt="GNC Plant Isolate" class="hero-img"/>
+      <div class="ftag ft1"><small>Rating</small><strong>4.4 ★</strong></div>
+      <div class="ftag ft2"><small>Per Scoop</small><strong>25g Protein</strong></div>
+      <div class="ftag ft3"><small>Quality</small><strong>PDCAAS 1</strong></div>
+      <div class="hpill"><s>₹2,399</s> ₹1,799</div>
+    </div>
+  </div>
+</section>
+
+<!-- Marquee -->
+<div class="mq"><div class="mq-t">
+  <span class="mq-i">25g Protein</span><span class="mq-i">·</span>
+  <span class="mq-i">10.1g EAAs</span><span class="mq-i">·</span>
+  <span class="mq-i">PDCAAS Score of 1</span><span class="mq-i">·</span>
+  <span class="mq-i">DigeZyme®</span><span class="mq-i">·</span>
+  <span class="mq-i">Soy-Free</span><span class="mq-i">·</span>
+  <span class="mq-i">Zero Maltodextrin</span><span class="mq-i">·</span>
+  <span class="mq-i">200+ Quality Checks</span><span class="mq-i">·</span>
+  <span class="mq-i">Formulated in USA</span><span class="mq-i">·</span>
+  <span class="mq-i">25g Protein</span><span class="mq-i">·</span>
+  <span class="mq-i">10.1g EAAs</span><span class="mq-i">·</span>
+  <span class="mq-i">PDCAAS Score of 1</span><span class="mq-i">·</span>
+  <span class="mq-i">DigeZyme®</span><span class="mq-i">·</span>
+  <span class="mq-i">Soy-Free</span><span class="mq-i">·</span>
+  <span class="mq-i">Zero Maltodextrin</span><span class="mq-i">·</span>
+  <span class="mq-i">200+ Quality Checks</span><span class="mq-i">·</span>
+  <span class="mq-i">Formulated in USA</span><span class="mq-i">·</span>
+</div></div>
+
+<!-- FEATURES -->
+<section class="sec bgl" id="feat"><div class="wrap">
+  <div class="eye">Why Choose</div>
+  <h2 class="sh">We Engineered <span class="r">How Your Body</span> Uses Plants.</h2>
+  <p class="sp">Every scoop backed by 200+ quality checks. Formulated in USA, verified by Eurofins &amp; SGS labs.</p>
+  <div class="cgrid c3">
+    <div class="card"><div class="card-ico">🌱</div><h3>25g Plant Protein</h3><p>Pea &amp; brown rice isolate blend with best-in-class 10.1g EAAs per scoop.</p></div>
+    <div class="card"><div class="card-ico">🧬</div><h3>PDCAAS Score of 1</h3><p>Highest protein quality score — matching whey. Complete amino acid profile.</p></div>
+    <div class="card"><div class="card-ico">⚡</div><h3>DigeZyme® Enzymes</h3><p>Patented multi-enzyme complex. No bloating, no heaviness — just clean absorption.</p></div>
+    <div class="card"><div class="card-ico">🚫</div><h3>Zero Junk</h3><p>No maltodextrin, no fillers, no soy, no added sugar. What's on the label is tested.</p></div>
+    <div class="card"><div class="card-ico">🔬</div><h3>Lab Verified</h3><p>Every batch tested by Eurofins &amp; SGS. Blind-tested for taste &amp; mixability.</p></div>
+    <div class="card"><div class="card-ico">🇺🇸</div><h3>Formulated in USA</h3><p>Decades of GNC research. 200+ quality checks ensuring global standards.</p></div>
+  </div>
+</div></section>
+
+<!-- POUR (Scroll-Pinned) -->
+<div class="pour-wrap" id="pour">
+  <div class="pour-pin">
+    <canvas id="pc"></canvas>
+    <div class="pour-txt" id="pt1"><h2>One Scoop of <span class="r">Pure Power</span></h2><p>25g plant protein. Watch it pour.</p></div>
+    <div class="pour-txt" id="pt2"><h2>Hits the <span class="r">Water</span></h2><p>Clean dissolution. Zero clumps.</p></div>
+    <div class="pour-txt" id="pt3"><h2>Rich. Thick. <span class="r">Chocolate.</span></h2><p>Smooth, non-chalky. Just mix &amp; go.</p></div>
+    <div class="pour-dots"><div class="pdot on"></div><div class="pdot"></div><div class="pdot"></div><div class="pdot"></div></div>
+    <div class="pour-hint" id="phint">↓ Scroll to Pour</div>
+  </div>
+</div>
+
+<!-- HOW TO USE -->
+<section class="sec" id="howto"><div class="wrap">
+  <div class="eye">How To Use</div>
+  <h2 class="sh">1 Scoop. <span class="r">Mix &amp; Go.</span></h2>
+  <p class="sp">No prep. No heaviness. Four simple steps.</p>
+  <div class="cgrid c4">
+    <div class="card" style="text-align:center"><div style="font-family:'Space Grotesk';font-size:1.8rem;font-weight:900;color:var(--r);margin-bottom:8px">01</div><h3>Add 1 Scoop</h3><p>One level scoop of GNC Plant Isolate.</p></div>
+    <div class="card" style="text-align:center"><div style="font-family:'Space Grotesk';font-size:1.8rem;font-weight:900;color:var(--r);margin-bottom:8px">02</div><h3>200–250ml Water</h3><p>Pour into cold water or milk.</p></div>
+    <div class="card" style="text-align:center"><div style="font-family:'Space Grotesk';font-size:1.8rem;font-weight:900;color:var(--r);margin-bottom:8px">03</div><h3>Shake Well</h3><p>30 seconds for a smooth blend.</p></div>
+    <div class="card" style="text-align:center"><div style="font-family:'Space Grotesk';font-size:1.8rem;font-weight:900;color:var(--r);margin-bottom:8px">04</div><h3>Drink &amp; Recover</h3><p>Post-workout or morning protein.</p></div>
+  </div>
+</div></section>
+
+<!-- SOURCE -->
+<section class="sec bgl" id="src"><div class="wrap">
+  <div class="eye">The Science</div>
+  <h2 class="sh">One Scoop. <span class="r">Four Systems.</span></h2>
+  <p class="sp">Two plants, one complete protein matching whey in amino acid completeness.</p>
+  <div class="src-row">
+    <div class="card src-card"><span class="e">🫛</span><h3>Pea Protein Isolate</h3><p>Rich in BCAAs &amp; lysine. High bioavailability for muscle-building strength.</p></div>
+    <div class="src-plus">+</div>
+    <div class="card src-card"><span class="e">🌾</span><h3>Brown Rice Protein</h3><p>Complementary amino acids. Together — a complete protein with all 9 EAAs.</p></div>
+  </div>
+  <div class="stat-row">
+    <div class="stat"><b>25g</b><span>Protein</span></div>
+    <div class="stat"><b>10.1g</b><span>EAAs</span></div>
+    <div class="stat"><b>0g</b><span>Added Sugar</span></div>
+    <div class="stat"><b>200+</b><span>Quality Checks</span></div>
+  </div>
+</div></section>
+
+<!-- TRUST -->
+<section class="sec"><div class="wrap">
+  <div class="eye">Tested Beyond Our Walls</div>
+  <h2 class="sh">What's on the Label is <span class="r">What's Tested</span></h2>
+  <p class="sp">Independently verified. No shortcuts.</p>
+  <div class="cgrid c3">
+    <div class="card" style="text-align:center"><div class="card-ico" style="margin:0 auto 16px">🌍</div><h3>Eurofins &amp; SGS Verified</h3><p>Every batch tested by globally recognized labs for purity and safety.</p></div>
+    <div class="card" style="text-align:center"><div class="card-ico" style="margin:0 auto 16px">👅</div><h3>Blind Taste Tested</h3><p>Independently blind-tested for taste &amp; mixability. Smooth and non-chalky.</p></div>
+    <div class="card" style="text-align:center"><div class="card-ico" style="margin:0 auto 16px">🇺🇸</div><h3>Formulated in USA</h3><p>Decades of GNC science with 200+ quality checks meeting global standards.</p></div>
+  </div>
+</div></section>
+
+<!-- FLAVORS -->
+<section class="sec bgl" id="flav"><div class="wrap">
+  <div class="eye">Pick Your Flavor</div>
+  <h2 class="sh">Four Delicious <span class="r">Flavors</span></h2>
+  <p class="sp">Smooth, non-chalky. Each delivers 25g plant protein per serving.</p>
+  <div class="cgrid c4">
+    <div class="flv choc"><span class="fpop">Popular</span><img src="https://www.guardian.in/cdn/shop/files/Chocolate_1.jpg?v=1777960182&width=400" alt="Chocolate"/><h3>Chocolate</h3><small>Rich &amp; Indulgent</small></div>
+    <div class="flv cof"><img src="https://www.guardian.in/cdn/shop/files/coffee_1.jpg?v=1777960190&width=400" alt="Coffee"/><h3>Coffee</h3><small>Bold &amp; Energizing</small></div>
+    <div class="flv man"><img src="https://www.guardian.in/cdn/shop/files/mango_1.jpg?v=1777960201&width=400" alt="Mango"/><h3>Mango</h3><small>Tropical &amp; Refreshing</small></div>
+    <div class="flv van"><img src="https://www.guardian.in/cdn/shop/files/Flavour_Blast_with_Product_1.jpg?v=1777901329&width=400" alt="Vanilla"/><h3>Vanilla</h3><small>Classic &amp; Smooth</small></div>
+  </div>
+</div></section>
+
+<!-- PRICING -->
+<section class="sec" id="price"><div class="wrap">
+  <div class="pr-row">
+    <div class="pcard">
+      <div class="pbadge">25% OFF</div>
+      <p class="pmrp">MRP ₹2,399</p>
+      <div class="pprice"><span>₹</span>1,799</div>
+      <p class="ppre">₹1,774 with prepaid — save extra ₹25</p>
+      <ul class="pperks">
+        <li>Free shipping on prepaid orders over ₹799</li>
+        <li>Earn ₹54 GNC Cash on this purchase</li>
+        <li>Available in 2 lbs (907g) &amp; 35g sachets</li>
+        <li>New formulation with DigeZyme®</li>
+        <li>Authentic GNC product with hologram</li>
+      </ul>
+      <a href="https://www.guardian.in/products/gnc-amp-plant-isolate-1" class="br" target="_blank" style="width:100%;justify-content:center">Add to Cart — ₹1,799 <svg class="arw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg></a>
+    </div>
+    <div>
+      <div class="eye">Best Value</div>
+      <h2 class="sh">Premium Protein at <span class="r">₹1,799</span></h2>
+      <p class="sp" style="margin-bottom:14px">Each serving costs less than your morning coffee but delivers 25g of complete plant protein.</p>
+      <img src="https://www.guardian.in/cdn/shop/files/Flavour_Blast_with_Product_2.jpg?v=1777901698&width=600" alt="All Flavors" class="pr-img"/>
+      <div class="promo"><b>GNCFIRST</b><small>₹150 off first prepaid order over ₹2,999</small></div>
+    </div>
+  </div>
+</div></section>
+
+<!-- NUTRITION -->
+<section class="sec bgl" id="nutr"><div class="wrap">
+  <div class="eye">Per Serving</div>
+  <h2 class="sh">Nutrition <span class="r">Breakdown</span></h2>
+  <p class="sp">Every macro optimized for performance.</p>
+  <div class="cgrid c4">
+    <div class="ncard" data-p="83"><div class="nring"><svg viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="40"/><circle class="fg" cx="50" cy="50" r="40"/></svg><b>25g</b></div><h4>Protein</h4><small>Pea + Brown Rice</small></div>
+    <div class="ncard" data-p="34"><div class="nring"><svg viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="40"/><circle class="fg" cx="50" cy="50" r="40"/></svg><b>10.1g</b></div><h4>EAAs</h4><small>Best-in-Class</small></div>
+    <div class="ncard" data-p="7"><div class="nring"><svg viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="40"/><circle class="fg" cx="50" cy="50" r="40"/></svg><b>0g</b></div><h4>Added Sugar</h4><small>Clean Formula</small></div>
+    <div class="ncard" data-p="43"><div class="nring"><svg viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="40"/><circle class="fg" cx="50" cy="50" r="40"/></svg><b>130</b></div><h4>Calories</h4><small>Per Serving</small></div>
+  </div>
+</div></section>
+
+<!-- REVIEWS -->
+<section class="sec" id="rev"><div class="wrap">
+  <div class="rev-h">
+    <div><div class="eye">Customer Love</div><h2 class="sh">What People <span class="r">Say</span></h2></div>
+    <div class="rev-sc"><div class="rbig">4.4</div><div><div class="rstars">★★★★☆</div><div class="rcount">78 verified reviews</div></div></div>
+  </div>
+  <div class="cgrid c3">
+    <div class="rcard"><div class="rs">★★★★★</div><p class="rt">"Best plant protein I've tried. Mixes smoothly, tastes great, and no bloating. Chocolate is absolutely delicious."</p><div class="ra"><div class="rav">AK</div><div><div class="ran">Amit K.</div><div class="rab">Verified Purchase</div></div></div></div>
+    <div class="rcard"><div class="rs">★★★★★</div><p class="rt">"Finally a plant protein that doesn't taste chalky. PDCAAS score of 1 sold me. Recovery times visibly improved."</p><div class="ra"><div class="rav">PS</div><div><div class="ran">Priya S.</div><div class="rab">Verified Purchase</div></div></div></div>
+    <div class="rcard"><div class="rs">★★★★☆</div><p class="rt">"Great value — 25g protein with DigeZyme for digestion. Coffee flavor is my daily post workout go-to. Just mix &amp; go."</p><div class="ra"><div class="rav">RV</div><div><div class="ran">Rahul V.</div><div class="rab">Verified Purchase</div></div></div></div>
+  </div>
+</div></section>
+
+<!-- CTA -->
+<section class="cta">
+  <h2>Fuel Your Plant Power</h2>
+  <p>Join thousands who've switched to cleaner, smarter protein.</p>
+  <a href="https://www.guardian.in/products/gnc-amp-plant-isolate-1" class="bw" target="_blank">Get Yours — ₹1,799 <svg class="arw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg></a>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="foot-in">
+    <img src="https://www.guardian.in/cdn/shop/files/GNC-red-logo.png?v=1738825812&width=160" alt="GNC" class="flogo"/>
+    <div class="flinks"><a href="https://www.guardian.in" target="_blank">Guardian.in</a><a href="#feat">Features</a><a href="#nutr">Nutrition</a><a href="#rev">Reviews</a></div>
+  </div>
+  <div class="fcopy">© 2026 Guardian Healthcare. All rights reserved.</div>
+</footer>
+
+<!-- GSAP -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollToPlugin.min.js"></script>
+<script>
+gsap.registerPlugin(ScrollTrigger,ScrollToPlugin);
+
+/* ═══ LOADER ═══ */
+gsap.to('#lfill',{width:'100%',duration:1,ease:'power2.inOut',onComplete(){
+  document.getElementById('loader').classList.add('done');
+  setTimeout(init,400);
+}});
+
+/* ═══ SMOOTH SCROLL ═══ */
+document.querySelectorAll('a[href^="#"]').forEach(a=>{
+  a.addEventListener('click',e=>{e.preventDefault();const t=document.querySelector(a.getAttribute('href'));if(t)gsap.to(window,{scrollTo:{y:t,offsetY:60},duration:1,ease:'power3.inOut'})})
+});
+
+/* ═══════════════════ POUR CANVAS ═══════════════════ */
+const cv=document.getElementById('pc'),cx=cv.getContext('2d');
+let W,H;
+function resize(){W=cv.width=cv.offsetWidth;H=cv.height=cv.offsetHeight}
+resize();
+window.addEventListener('resize',resize);
+
+// Seeded random
+function srand(s){return function(){s=(s*16807)%2147483647;return(s-1)/2147483646}}
+
+// Build powder particles (deterministic from scroll position)
+function getParticles(){
+  const rand=srand(42);
+  const arr=[];
+  for(let i=0;i<500;i++){
+    arr.push({
+      birth:.04+rand()*.5,
+      fall:.12+rand()*.18,
+      sx:W*.4+rand()*W*.2,
+      dx:(rand()-.5)*W*.06,
+      wAmp:rand()*10+2,
+      wFreq:rand()*6+3,
+      wPh:rand()*Math.PI*2,
+      sz:rand()<.7?(.6+rand()*1.8):(1.8+rand()*3),
+      al:.45+rand()*.55,
+      cr:[[59,30,10],[90,42,15],[107,58,31],[140,80,40],[160,96,48],[120,70,30],[80,45,18],[180,130,80]][Math.floor(rand()*8)],
+      dis:.3+rand()*.7
+    });
+  }
+  return arr;
+}
+const PP=getParticles();
+
+// Build dust
+function getDust(){
+  const rand=srand(99);
+  const arr=[];
+  for(let i=0;i<150;i++){
+    arr.push({
+      birth:.05+rand()*.45,
+      dur:.18+rand()*.18,
+      sx:W*.35+rand()*W*.3,
+      dx:(rand()-.5)*W*.12,
+      sz:.3+rand()*1,
+      al:.08+rand()*.15,
+      cr:[[107,58,31],[160,96,48],[180,130,80]][Math.floor(rand()*3)]
+    });
+  }
+  return arr;
+}
+const DD=getDust();
+
+let prog=0;
+
+function drawPour(){
+  cx.clearRect(0,0,W,H);
+  cx.fillStyle='#fff';
+  cx.fillRect(0,0,W,H);
+
+  const p=prog,t=Date.now()*.001,gx=W/2;
+
+  // Glass
+  const gW=Math.min(W*.18,150),gTop=H*.42,gBot=H*.88;
+
+  cx.save();
+  cx.strokeStyle=`rgba(180,180,180,${.12+p*.2})`;
+  cx.lineWidth=1.5;
+  cx.beginPath();
+  cx.moveTo(gx-gW-8,gTop);
+  cx.lineTo(gx-gW+4,gBot);
+  cx.lineTo(gx+gW-4,gBot);
+  cx.lineTo(gx+gW+8,gTop);
+  cx.stroke();
+  cx.beginPath();
+  cx.ellipse(gx,gTop,gW+8,5,0,0,Math.PI*2);
+  cx.stroke();
+  cx.restore();
+
+  // Water
+  const rise=Math.max(0,Math.min((p-.12)/.55,1));
+  if(rise>0){
+    const mix=Math.max(0,Math.min((p-.3)/.4,1));
+    const wTop=gBot-(gBot-gTop)*(.12+rise*.65);
+    const sW=gW+8-(gW+8-gW+4)*((wTop-gTop)/(gBot-gTop));
+
+    // Color: clear → chocolate
+    const cr=Math.round(190-mix*130),cg=Math.round(210-mix*152),cb=Math.round(235-mix*204);
+    const ca=.18+rise*.45+mix*.2;
+
+    cx.save();
+    cx.beginPath();
+    // Rippled surface
+    const rAmp=1.5+rise*3+mix*2;
+    for(let x=gx-sW;x<=gx+sW;x+=2){
+      const y=wTop+Math.sin(x*.025+t*2)*rAmp+Math.sin(x*.06+t*3)*rAmp*.4;
+      x===gx-sW?cx.moveTo(x,y):cx.lineTo(x,y);
+    }
+    cx.lineTo(gx+gW-4,gBot);cx.lineTo(gx-gW+4,gBot);cx.closePath();
+    const wg=cx.createLinearGradient(0,wTop,0,gBot);
+    wg.addColorStop(0,`rgba(${cr},${cg},${cb},${ca*.8})`);
+    wg.addColorStop(.5,`rgba(${cr},${cg},${cb},${ca})`);
+    wg.addColorStop(1,`rgba(${Math.max(cr-20,0)},${Math.max(cg-20,0)},${Math.max(cb-15,0)},${Math.min(ca+.1,1)})`);
+    cx.fillStyle=wg;
+    cx.fill();
+
+    // Swirls
+    if(mix>.05){
+      for(let i=0;i<6;i++){
+        const sx=gx+Math.sin(t*.7+i*1.3)*(sW*.5);
+        const sy=wTop+20+i*((gBot-wTop-30)/6);
+        const sr=8+mix*25;
+        const sg=cx.createRadialGradient(sx,sy,0,sx,sy,sr);
+        sg.addColorStop(0,`rgba(90,42,15,${.02+mix*.1})`);
+        sg.addColorStop(1,'rgba(90,42,15,0)');
+        cx.fillStyle=sg;
+        cx.beginPath();cx.ellipse(sx,sy,sr,sr*.45,Math.sin(t*.4+i)*.3,0,Math.PI*2);cx.fill();
+      }
+    }
+    // Foam
+    if(mix>.2){
+      const fa=Math.min((mix-.2)*2,.45);
+      for(let i=0;i<12;i++){
+        const fx=gx-sW+6+i*((sW*2-12)/12)+Math.sin(t+i)*3;
+        const fy=wTop+Math.sin(fx*.025+t*2)*rAmp-2;
+        cx.beginPath();cx.arc(fx,fy,2+Math.sin(t*.6+i)*1.2,0,Math.PI*2);
+        cx.fillStyle=`rgba(210,180,150,${fa})`;cx.fill();
+      }
+    }
+    cx.restore();
+  }
+
+  // Pour stream
+  const sVis=p>.04&&p<.6?Math.min((p-.04)*10,1)*Math.min((.6-p)*6,1):0;
+  if(sVis>0){
+    const sw=3+sVis*10;
+    const sg=cx.createLinearGradient(gx-sw,0,gx+sw,0);
+    sg.addColorStop(0,'rgba(107,58,31,0)');
+    sg.addColorStop(.35,`rgba(140,80,40,${sVis*.05})`);
+    sg.addColorStop(.5,`rgba(107,58,31,${sVis*.09})`);
+    sg.addColorStop(.65,`rgba(140,80,40,${sVis*.05})`);
+    sg.addColorStop(1,'rgba(107,58,31,0)');
+    cx.fillStyle=sg;
+    const sEnd=rise>0?gBot-(gBot-gTop)*(.12+rise*.65)+10:H*.55;
+    cx.fillRect(gx-sw,H*.06,sw*2,sEnd-H*.06);
+
+    // Cluster at top
+    const cg2=cx.createRadialGradient(gx,H*.08,0,gx,H*.08,25);
+    cg2.addColorStop(0,`rgba(107,58,31,${sVis*.1})`);
+    cg2.addColorStop(1,'rgba(107,58,31,0)');
+    cx.fillStyle=cg2;cx.fillRect(gx-30,H*.04,60,50);
+
+    // Splash at water
+    if(rise>0){
+      const wTop2=gBot-(gBot-gTop)*(.12+rise*.65);
+      for(let i=0;i<10;i++){
+        const a=Math.PI*.3+Math.PI*.4*(i/10)+Math.sin(t*3+i)*.15;
+        const d=5+sVis*15+Math.sin(t*4+i*2)*3;
+        cx.beginPath();cx.arc(gx+Math.cos(a)*d,wTop2+Math.sin(a)*d*.25-2,1+sVis*1.5,0,Math.PI*2);
+        cx.fillStyle=`rgba(140,80,40,${sVis*.25})`;cx.fill();
+      }
+    }
+  }
+
+  // Scoop
+  const scV=p>.01&&p<.55?Math.min((p-.01)*12,1)*Math.min((.55-p)*5,1):0;
+  if(scV>0){
+    const tilt=Math.min(p*3,1)*.55;
+    cx.save();cx.translate(gx,H*.06);cx.rotate(tilt);
+    cx.beginPath();cx.ellipse(0,0,24,11,0,0,Math.PI);
+    cx.strokeStyle=`rgba(150,150,150,${scV*.45})`;cx.lineWidth=1.8;cx.stroke();
+    cx.beginPath();cx.moveTo(24,0);cx.lineTo(48,-7);
+    cx.strokeStyle=`rgba(150,150,150,${scV*.35})`;cx.lineWidth=1.3;cx.stroke();
+    const mound=Math.max(0,1-p*2.8);
+    if(mound>0){
+      cx.beginPath();cx.ellipse(0,-2,20*mound,8*mound,0,Math.PI,0);
+      cx.fillStyle=`rgba(107,58,31,${scV*.55*mound})`;cx.fill();
+    }
+    cx.restore();
+  }
+
+  // Powder particles
+  const wLine=rise>0?gBot-(gBot-gTop)*(.12+rise*.65):H*.85;
+  for(let i=0;i<PP.length;i++){
+    const q=PP[i];
+    if(p<q.birth)continue;
+    const life=(p-q.birth)/q.fall;
+    if(life>2.2)continue;
+    const ft=Math.min(life,1);
+    const ease=ft*ft;
+    let py=H*.08+ease*(wLine-H*.08);
+    const wobble=Math.sin(life*q.wFreq+q.wPh)*q.wAmp*(1-ft*.4);
+    const px=q.sx+q.dx*ft+wobble;
+    let al=q.al,sz=q.sz;
+    if(life>1){
+      const dt=Math.min(life-1,1);
+      al*=(1-dt*q.dis);sz*=(1-dt*.4);
+      py=wLine+dt*25;
+      if(al<.02)continue;
+    }
+    if(py<-5||sz<.2)continue;
+    cx.globalAlpha=al;
+    cx.fillStyle=`rgb(${q.cr[0]},${q.cr[1]},${q.cr[2]})`;
+    if(q.sz>2){
+      cx.beginPath();
+      for(let s=0;s<5;s++){
+        const a=(s/5)*Math.PI*2+life*.4;
+        const r=sz*(.7+.3*Math.sin(a*3+i));
+        s===0?cx.moveTo(px+Math.cos(a)*r,py+Math.sin(a)*r):cx.lineTo(px+Math.cos(a)*r,py+Math.sin(a)*r);
+      }
+      cx.closePath();cx.fill();
+    }else{
+      cx.beginPath();cx.arc(px,py,sz,0,Math.PI*2);cx.fill();
+    }
+    cx.globalAlpha=1;
+  }
+
+  // Dust haze
+  for(let i=0;i<DD.length;i++){
+    const d=DD[i];
+    if(p<d.birth)continue;
+    const life=(p-d.birth)/d.dur;
+    if(life>1.5)continue;
+    const lt=Math.min(life,1);
+    const da=d.al*(1-lt*.7)*(life>1?(1-(life-1)*2):1);
+    if(da<.01)continue;
+    cx.globalAlpha=da;
+    cx.fillStyle=`rgb(${d.cr[0]},${d.cr[1]},${d.cr[2]})`;
+    cx.beginPath();cx.arc(d.sx+d.dx*lt,H*.08+lt*H*.32,d.sz,0,Math.PI*2);cx.fill();
+    cx.globalAlpha=1;
+  }
+
+  // Powder haze cloud
+  const hz=p>.06&&p<.5?Math.min((p-.06)*8,1)*Math.min((.5-p)*4,1):0;
+  if(hz>0){
+    for(let i=0;i<4;i++){
+      const hx=gx+(Math.sin(t*.4+i*1.8)-.5)*50;
+      const hy=H*.13+i*H*.05;
+      const hr=16+i*6;
+      const hg=cx.createRadialGradient(hx,hy,0,hx,hy,hr);
+      hg.addColorStop(0,`rgba(180,130,80,${hz*.035})`);
+      hg.addColorStop(1,'rgba(180,130,80,0)');
+      cx.fillStyle=hg;cx.beginPath();cx.arc(hx,hy,hr,0,Math.PI*2);cx.fill();
+    }
+  }
+
+  // Final shimmer
+  const sh=Math.max(0,Math.min((p-.75)/.2,1));
+  if(sh>0&&rise>0){
+    const wT=gBot-(gBot-gTop)*(.12+rise*.65);
+    const sW2=gW*.8;
+    for(let i=0;i<5;i++){
+      const sx=gx-sW2+i*(sW2*2/5)+Math.sin(t*1.8+i)*6;
+      const sy=wT+8+Math.sin(t*1.2+i)*6;
+      const sg2=cx.createRadialGradient(sx,sy,0,sx,sy,12);
+      sg2.addColorStop(0,`rgba(255,255,255,${sh*.05})`);
+      sg2.addColorStop(1,'rgba(255,255,255,0)');
+      cx.fillStyle=sg2;cx.beginPath();cx.arc(sx,sy,12,0,Math.PI*2);cx.fill();
+    }
+  }
+
+  requestAnimationFrame(drawPour);
+}
+drawPour();
+
+// Pin + scrub
+ScrollTrigger.create({
+  trigger:'.pour-wrap',
+  start:'top top',
+  end:'bottom bottom',
+  pin:'.pour-pin',
+  scrub:.3,
+  onUpdate(self){
+    prog=self.progress;
+    // Stages
+    const pts=[
+      {el:document.getElementById('pt1'),a:.02,b:.28},
+      {el:document.getElementById('pt2'),a:.33,b:.58},
+      {el:document.getElementById('pt3'),a:.63,b:.92}
+    ];
+    pts.forEach(s=>{
+      if(!s.el)return;
+      const inR=prog>=s.a&&prog<=s.b;
+      const fi=Math.min((prog-s.a)*12,1);
+      const fo=Math.min((s.b-prog)*12,1);
+      const op=inR?Math.min(fi,fo):0;
+      s.el.style.opacity=op;
+      s.el.style.transform=`translateX(-50%) translateY(${inR?0:15}px)`;
+      if(op>.01)s.el.classList.add('vis');else s.el.classList.remove('vis');
+    });
+    // Dots
+    [0,.25,.5,.75].forEach((th,i)=>{
+      const d=document.querySelectorAll('.pdot')[i];
+      if(d){d.classList.toggle('on',prog>=th)}
+    });
+    // Hint
+    const h=document.getElementById('phint');
+    if(h)h.style.opacity=prog<.04?1:0;
+  }
+});
+
+/* ═══════════════════ MAIN INIT ═══════════════════ */
+function init(){
+  // Nav
+  gsap.to('nav',{opacity:1,y:0,duration:.5,ease:'power3.out'});
+
+  // Hero
+  gsap.from('.hero h1',{y:60,opacity:0,duration:1,ease:'power4.out'});
+  gsap.from('.hero-badge',{x:-20,opacity:0,duration:.6,delay:.2,ease:'power3.out'});
+  gsap.from('.hero-p',{y:20,opacity:0,duration:.7,delay:.4,ease:'power3.out'});
+  gsap.from('.hero-ctas',{y:20,opacity:0,duration:.7,delay:.5,ease:'power3.out'});
+  gsap.from('.hero-img',{scale:.85,opacity:0,y:40,duration:1.2,delay:.3,ease:'power3.out'});
+  gsap.from('.ftag',{opacity:0,scale:.5,stagger:.1,duration:.5,delay:.8,ease:'back.out(2)'});
+  gsap.from('.hpill',{opacity:0,y:15,scale:.5,duration:.5,delay:1,ease:'back.out(2)'});
+
+  // Float
+  gsap.to('.hero-img',{y:-12,repeat:-1,yoyo:true,duration:2.5,ease:'sine.inOut',delay:1.5});
+  gsap.to('.ft1',{y:-6,repeat:-1,yoyo:true,duration:2,ease:'sine.inOut'});
+  gsap.to('.ft2',{y:5,repeat:-1,yoyo:true,duration:2.2,ease:'sine.inOut',delay:.3});
+  gsap.to('.ft3',{y:-4,repeat:-1,yoyo:true,duration:1.9,ease:'sine.inOut',delay:.5});
+  gsap.to('.hero-glow',{scale:1.15,opacity:.5,repeat:-1,yoyo:true,duration:3,ease:'sine.inOut'});
+
+  // Parallax hero
+  gsap.to('.hero-img',{y:-25,scrollTrigger:{trigger:'.hero',start:'top top',end:'bottom top',scrub:1}});
+
+  // Scroll animations — use ScrollTrigger batch for cards
+  gsap.utils.toArray('.eye').forEach(el=>{
+    gsap.from(el,{scrollTrigger:{trigger:el,start:'top 90%',toggleActions:'play none none none'},x:-30,opacity:0,duration:.5,ease:'power3.out'});
+  });
+  gsap.utils.toArray('.sh').forEach(el=>{
+    gsap.from(el,{scrollTrigger:{trigger:el,start:'top 90%',toggleActions:'play none none none'},y:40,opacity:0,duration:.7,ease:'power3.out'});
+  });
+  gsap.utils.toArray('.sp').forEach(el=>{
+    gsap.from(el,{scrollTrigger:{trigger:el,start:'top 90%',toggleActions:'play none none none'},y:20,opacity:0,duration:.6,delay:.1,ease:'power3.out'});
+  });
+
+  // Cards
+  gsap.utils.toArray('.cgrid').forEach(grid=>{
+    gsap.from(grid.children,{scrollTrigger:{trigger:grid,start:'top 85%',toggleActions:'play none none none'},y:60,opacity:0,stagger:.07,duration:.6,ease:'power3.out'});
+  });
+
+  // Source
+  gsap.from('.src-row .card',{scrollTrigger:{trigger:'.src-row',start:'top 80%'},scale:.7,opacity:0,stagger:.15,duration:.7,ease:'back.out(1.5)'});
+  gsap.from('.src-plus',{scrollTrigger:{trigger:'.src-row',start:'top 80%'},scale:0,rotation:180,opacity:0,duration:.5,delay:.2,ease:'back.out(2)'});
+  gsap.from('.stat',{scrollTrigger:{trigger:'.stat-row',start:'top 85%'},y:30,opacity:0,stagger:.08,duration:.5,ease:'power3.out'});
+
+  // Flavors
+  gsap.from('.flv img',{scrollTrigger:{trigger:'.flv',start:'top 85%'},scale:.5,opacity:0,rotation:-6,stagger:.1,duration:.5,delay:.15,ease:'back.out(1.5)'});
+
+  // Pricing
+  gsap.from('.pcard',{scrollTrigger:{trigger:'.pr-row',start:'top 80%'},x:-60,opacity:0,duration:.8,ease:'power3.out'});
+  gsap.from('.pr-img',{scrollTrigger:{trigger:'.pr-img',start:'top 88%'},scale:.75,opacity:0,duration:.7,ease:'back.out(1.3)'});
+  gsap.from('.promo',{scrollTrigger:{trigger:'.promo',start:'top 88%'},scale:.8,opacity:0,duration:.5,ease:'back.out(1.5)'});
+
+  // Nutrition rings
+  document.querySelectorAll('.ncard').forEach(c=>{
+    const pct=parseInt(c.dataset.p)||0;
+    const circle=c.querySelector('.fg');
+    if(!circle)return;
+    const circ=2*Math.PI*40;
+    circle.style.strokeDasharray=circ;
+    circle.style.strokeDashoffset=circ;
+    ScrollTrigger.create({trigger:c,start:'top 85%',once:true,
+      onEnter(){gsap.to(circle,{strokeDashoffset:circ-(circ*pct/100),duration:1.2,ease:'power3.out'})}
+    });
+  });
+
+  // Reviews
+  gsap.from('.rbig',{scrollTrigger:{trigger:'.rev-sc',start:'top 88%'},scale:.2,opacity:0,duration:.7,ease:'back.out(2.5)'});
+  gsap.from('.rcard',{scrollTrigger:{trigger:'.rcard',start:'top 88%'},y:50,opacity:0,stagger:.1,duration:.6,ease:'power3.out'});
+
+  // CTA
+  gsap.from('.cta h2',{scrollTrigger:{trigger:'.cta',start:'top 80%'},y:40,opacity:0,duration:.7,ease:'power3.out'});
+  gsap.from('.cta p',{scrollTrigger:{trigger:'.cta',start:'top 78%'},y:20,opacity:0,duration:.6,delay:.1,ease:'power3.out'});
+  gsap.from('.cta .bw',{scrollTrigger:{trigger:'.cta',start:'top 75%'},scale:.7,opacity:0,duration:.5,delay:.2,ease:'back.out(1.5)'});
+
+  // 3D tilt on cards
+  document.querySelectorAll('.card,.flv').forEach(c=>{
+    c.addEventListener('mousemove',e=>{
+      const r=c.getBoundingClientRect(),x=(e.clientX-r.left)/r.width-.5,y=(e.clientY-r.top)/r.height-.5;
+      gsap.to(c,{rotateY:x*8,rotateX:-y*8,duration:.3,transformPerspective:500});
+    });
+    c.addEventListener('mouseleave',()=>gsap.to(c,{rotateY:0,rotateX:0,duration:.5,ease:'elastic.out(1,.4)'}));
+  });
+
+  // Magnetic buttons
+  document.querySelectorAll('.br,.bo,.bw,.nbuy').forEach(b=>{
+    b.addEventListener('mousemove',e=>{
+      const r=b.getBoundingClientRect();
+      gsap.to(b,{x:(e.clientX-r.left-r.width/2)*.18,y:(e.clientY-r.top-r.height/2)*.18,duration:.3,ease:'power2.out'});
+    });
+    b.addEventListener('mouseleave',()=>gsap.to(b,{x:0,y:0,duration:.5,ease:'elastic.out(1,.3)'}));
+  });
+
+  // Nav shadow
+  ScrollTrigger.create({start:60,onUpdate(s){
+    document.querySelector('nav').style.boxShadow=s.scroll()>60?'0 3px 20px rgba(0,0,0,.05)':'none';
+  }});
+}
+</script>
+</body>
+</html>

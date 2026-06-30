@@ -23,17 +23,43 @@ async function syncShopifyOrders() {
   return { source: 'shopify_orders', rowsAdded: dailyRows.length, since };
 }
 
+const MAX_SESSION_DAYS = 25; // 2 ShopifyQL calls per day → max 50 API calls per sync
+
 async function syncShopifySessions() {
   const state = await getSyncState('shopify_sessions');
-  const since = state?.last_synced_date || SESSIONS_START_DATE;
-  const rows = await fetchPageSessionsSince(since);
+  const lastSynced = state?.last_synced_date || SESSIONS_START_DATE;
+  const today = todayIso();
 
-  await appendRows('page_sessions', rows);
-  const dates = rows.map(r => r[0]).filter(Boolean).sort();
-  const latestDate = dates.length ? dates[dates.length - 1] : null;
-  if (latestDate) await setSyncState('shopify_sessions', latestDate);
+  const nextDay = new Date(lastSynced + 'T00:00:00Z');
+  nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+  const startDate = nextDay.toISOString().slice(0, 10);
 
-  return { source: 'shopify_sessions', rowsAdded: rows.length, latestDate, since };
+  if (startDate > today) return { source: 'shopify_sessions', rowsAdded: 0, since: lastSynced, msg: 'already up to date' };
+
+  let totalRows = 0;
+  let latestDate = lastSynced;
+  let dayCount = 0;
+  const d = new Date(startDate + 'T00:00:00Z');
+  const endD = new Date(today + 'T00:00:00Z');
+
+  while (d <= endD && dayCount < MAX_SESSION_DAYS) {
+    const dayStr = d.toISOString().slice(0, 10);
+    try {
+      const rows = await fetchPageSessionsSince(dayStr, dayStr);
+      if (rows.length) {
+        await appendRows('page_sessions', rows);
+        totalRows += rows.length;
+        latestDate = dayStr;
+      }
+    } catch (err) {
+      console.error(`Sessions sync failed for ${dayStr}:`, err.message);
+    }
+    d.setUTCDate(d.getUTCDate() + 1);
+    dayCount++;
+  }
+
+  if (latestDate > lastSynced) await setSyncState('shopify_sessions', latestDate);
+  return { source: 'shopify_sessions', rowsAdded: totalRows, latestDate, since: lastSynced, daysSynced: dayCount };
 }
 
 async function syncCroWeb() {

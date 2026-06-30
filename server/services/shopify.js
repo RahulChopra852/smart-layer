@@ -169,9 +169,9 @@ export async function fetchHourlyOrders(date, channel = 'GNC <> Gokwik') {
 }
 
 // Sessions by landing page + source, capped at 200 rows per source query.
-export async function fetchPageSessionsSince(sinceDate) {
+export async function fetchPageSessionsSince(sinceDate, untilDate = null) {
   assertConfigured();
-  const range = `SINCE ${sinceDate} UNTIL today`;
+  const range = `SINCE ${sinceDate} UNTIL ${untilDate || 'today'}`;
 
   const utmRows = await shopifyQL(
     `FROM sessions SHOW sessions, sessions_with_cart_additions GROUP BY day, landing_page_path, utm_source ${range} ORDER BY sessions DESC LIMIT 200 TIMESERIES day`
@@ -205,6 +205,7 @@ const INVENTORY_QUERY = `
         node {
           id
           title
+          handle
           status
           totalInventory
           variants(first: 50) {
@@ -241,6 +242,7 @@ export async function fetchLowStockAlerts() {
           alerts.push({
             product_id: product.id,
             product_title: product.title,
+            handle: product.handle,
             variant_title: variant.title,
             sku: variant.sku,
             qty: variant.inventoryQuantity,

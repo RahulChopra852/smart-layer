@@ -12,6 +12,68 @@ function Delta({ value, suffix = '' }) {
   );
 }
 
+function daysAgo(dateStr) {
+  if (!dateStr) return null;
+  const d1 = new Date(dateStr + 'T00:00:00Z');
+  const d2 = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
+  return Math.round((d2 - d1) / 86400000);
+}
+
+function OosSessionsTable() {
+  const { data, loading, error } = useApi('/api/analytics/oos-sessions');
+  const rows = data?.oosWithSessions || [];
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-6 text-xs text-text-muted gap-2">
+        <div className="w-3.5 h-3.5 border-2 border-border border-t-accent rounded-full animate-spin" />Loading session impact...
+      </div>
+    );
+  }
+  if (error) return <p className="text-xs text-negative text-center py-6">{error}</p>;
+  if (rows.length === 0) return null;
+
+  const totalLost = rows.reduce((s, r) => s + (r.sessions_during_oos || 0), 0);
+
+  return (
+    <div className="mt-4 pt-4 border-t border-border">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h3 className="text-sm font-semibold text-text-primary">Sessions Lost While OOS</h3>
+          <p className="text-xs text-text-muted mt-0.5">Visits to fully out-of-stock product pages since they went OOS</p>
+        </div>
+        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-negative/15 text-negative">
+          {totalLost.toLocaleString()} sessions
+        </span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead className="sticky top-0 z-[2] bg-card">
+            <tr className="border-b border-border">
+              <th className="text-left text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Product</th>
+              <th className="text-left text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">OOS Since</th>
+              <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Days OOS</th>
+              <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Sessions Lost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i} className="border-b border-border/50 hover:bg-bg transition-colors">
+                <td className="py-2.5 px-3 text-xs text-text-primary max-w-[240px] truncate" title={r.product_title}>
+                  {r.product_title}
+                </td>
+                <td className="py-2.5 px-3 text-xs text-text-secondary">{r.oos_since}</td>
+                <td className="py-2.5 px-3 text-xs text-right text-text-secondary">{daysAgo(r.oos_since)}</td>
+                <td className="py-2.5 px-3 text-xs text-right font-semibold text-negative">{r.sessions_during_oos?.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function LowStockCard() {
   const { data, loading, error } = useApi('/api/analytics/low-stock');
   const alerts = data?.alerts || [];
@@ -48,40 +110,43 @@ function LowStockCard() {
       ) : open && alerts.length === 0 ? (
         <p className="text-xs text-positive text-center py-8 mt-4">All key products are well-stocked</p>
       ) : open && (
-        <div className="overflow-x-auto mt-4">
-          <table className="w-full">
-            <thead className="sticky top-0 z-[2] bg-card">
-              <tr className="border-b border-border">
-                <th className="text-left text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Product</th>
-                <th className="text-left text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Variant</th>
-                <th className="text-left text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">SKU</th>
-                <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Qty</th>
-                <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {alerts.map((a, i) => (
-                <tr key={i} className="border-b border-border/50 hover:bg-bg transition-colors">
-                  <td className="py-2.5 px-3 text-xs text-text-primary max-w-[240px] truncate" title={a.product_title}>
-                    {a.product_title}
-                  </td>
-                  <td className="py-2.5 px-3 text-xs text-text-secondary">{a.variant_title}</td>
-                  <td className="py-2.5 px-3 text-xs text-text-muted font-mono">{a.sku}</td>
-                  <td className={`py-2.5 px-3 text-xs text-right font-semibold ${a.qty === 0 ? 'text-negative' : a.qty < 20 ? 'text-warning' : 'text-text-primary'}`}>
-                    {a.qty}
-                  </td>
-                  <td className="py-2.5 px-3 text-right">
-                    <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
-                      a.qty === 0 ? 'bg-negative/15 text-negative' : a.qty < 20 ? 'bg-warning/15 text-warning' : 'bg-accent/15 text-accent'
-                    }`}>
-                      {a.qty === 0 ? 'OOS' : a.qty < 20 ? 'Critical' : 'Low'}
-                    </span>
-                  </td>
+        <>
+          <div className="overflow-x-auto mt-4">
+            <table className="w-full">
+              <thead className="sticky top-0 z-[2] bg-card">
+                <tr className="border-b border-border">
+                  <th className="text-left text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Product</th>
+                  <th className="text-left text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Variant</th>
+                  <th className="text-left text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">SKU</th>
+                  <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Qty</th>
+                  <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {alerts.map((a, i) => (
+                  <tr key={i} className="border-b border-border/50 hover:bg-bg transition-colors">
+                    <td className="py-2.5 px-3 text-xs text-text-primary max-w-[240px] truncate" title={a.product_title}>
+                      {a.product_title}
+                    </td>
+                    <td className="py-2.5 px-3 text-xs text-text-secondary">{a.variant_title}</td>
+                    <td className="py-2.5 px-3 text-xs text-text-muted font-mono">{a.sku}</td>
+                    <td className={`py-2.5 px-3 text-xs text-right font-semibold ${a.qty === 0 ? 'text-negative' : a.qty < 20 ? 'text-warning' : 'text-text-primary'}`}>
+                      {a.qty}
+                    </td>
+                    <td className="py-2.5 px-3 text-right">
+                      <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                        a.qty === 0 ? 'bg-negative/15 text-negative' : a.qty < 20 ? 'bg-warning/15 text-warning' : 'bg-accent/15 text-accent'
+                      }`}>
+                        {a.qty === 0 ? 'OOS' : a.qty < 20 ? 'Critical' : 'Low'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <OosSessionsTable />
+        </>
       )}
     </div>
   );

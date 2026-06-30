@@ -15,8 +15,18 @@ function Tooltip({ text, children }) {
   );
 }
 
+function isStale(lastSyncedDate) {
+  if (!lastSyncedDate) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  const d1 = new Date(today + 'T00:00:00Z');
+  const d2 = new Date(lastSyncedDate + 'T00:00:00Z');
+  const daysBehind = Math.round((d1 - d2) / 86400000);
+  return daysBehind;
+}
+
 export default function PagePerformance({ start, end, mode = 'top' }) {
   const { data, loading, error } = useApi(`/api/analytics/page-performance?start=${start}&end=${end}`);
+  const { data: syncStatus } = useApi('/api/sync/status');
   const allPages = data?.pages || [];
 
   const isTop = mode === 'top';
@@ -27,9 +37,13 @@ export default function PagePerformance({ start, end, mode = 'top' }) {
   const title = isTop ? 'Top Pages' : 'Needs Attention';
   const subtitle = isTop ? 'Landing pages with 1,000+ sessions' : 'Pages with 300+ sessions & below 5% ATC';
 
+  const lastSynced = syncStatus?.sources?.shopify_sessions?.last_synced_date;
+  const daysBehind = isStale(lastSynced);
+  const stale = daysBehind != null && daysBehind > 0;
+
   return (
     <div className="bg-card border border-border rounded-lg p-4">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-1">
         <div>
           <h2 className="text-base font-semibold text-text-primary">{title}</h2>
           <p className="text-xs text-text-muted mt-0.5">{subtitle}</p>
@@ -37,6 +51,15 @@ export default function PagePerformance({ start, end, mode = 'top' }) {
         <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${isTop ? 'bg-accent/15 text-accent' : 'bg-warning/15 text-warning'}`}>
           {pages.length} {isTop ? 'pages' : 'flagged'}
         </span>
+      </div>
+      <div className="mb-3">
+        {lastSynced ? (
+          <span className={`text-[10px] font-medium ${stale ? 'text-negative' : 'text-positive'}`}>
+            Data as of {lastSynced}{stale ? ` (${daysBehind}d behind)` : ' (current)'}
+          </span>
+        ) : (
+          <span className="text-[10px] text-text-muted">Sync status unknown</span>
+        )}
       </div>
 
       {loading ? (

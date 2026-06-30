@@ -55,6 +55,7 @@ export const TAB_SCHEMAS = {
   gokwik_products: ['date', 'product_name', 'order_count', 'quantity', 'revenue', 'payment_prepaid', 'payment_cod', 'avg_rto_score', 'high_rto_pct', 'top_coupon', 'top_utm_source', 'avg_discount'],
   gokwik_utm: ['date', 'utm_source', 'utm_medium', 'utm_campaign', 'order_count'],
   gokwik_landing_pages: ['date', 'landing_page', 'order_count', 'top_utm_source'],
+  oos_log: ['product_id', 'product_title', 'handle', 'sku', 'oos_since', 'restocked_at', 'status'],
   _sync_state: ['source', 'last_synced_date', 'last_synced_at']
 };
 
@@ -152,6 +153,34 @@ export async function readRows(tabName) {
     cols.forEach((col, i) => { obj[col] = row[i] ?? ''; });
     return obj;
   });
+}
+
+// Updates specific columns of a single row, matched by a key column/value. First match wins.
+export async function updateRowByKey(tabName, keyCol, keyVal, patch) {
+  const sheets = await getSheetsClient();
+  const cols = TAB_SCHEMAS[tabName];
+  const keyIdx = cols.indexOf(keyCol);
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `${tabName}!A2:ZZ`
+  });
+  const values = res.data.values || [];
+  const rowIdx = values.findIndex(row => row[keyIdx] === keyVal);
+  if (rowIdx === -1) return false;
+
+  const row = values[rowIdx];
+  for (const [col, val] of Object.entries(patch)) {
+    const i = cols.indexOf(col);
+    if (i !== -1) row[i] = val;
+  }
+  const rowNumber = rowIdx + 2;
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `${tabName}!A${rowNumber}:${String.fromCharCode(65 + cols.length - 1)}${rowNumber}`,
+    valueInputOption: 'RAW',
+    requestBody: { values: [row] }
+  });
+  return true;
 }
 
 export async function deleteRowsByDate(tabName, date, channelCol = null, channelVal = null) {

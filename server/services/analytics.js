@@ -1,4 +1,5 @@
-import { readRows } from '../db/sheetsDb.js';
+import { readRows, appendRows, updateRowByKey } from '../db/sheetsDb.js';
+import { fetchLowStockAlerts } from './shopify.js';
 
 function dateDaysAgo(n) {
   const d = new Date();
@@ -258,4 +259,87 @@ export async function getWebVitalsFlags(startDate, endDate) {
       return { ...r, flags };
     })
     .filter(r => r.flags.length > 0);
+}
+
+function todayIso() { return new Date().toISOString().slice(0, 10); }
+
+// Fetches live low-stock alerts, reconciles them against the oos_log sheet (opening/closing
+// OOS windows as products go fully out of stock or get restocked), and joins currently-OOS
+// products against page_sessions (by /products/<handle> landing page) to show sessions lost
+// while the product couldn't be purchased.
+export async function getOosWithSessions() {
+  const [alerts, log, pageRows] = await Promise.all([
+    fetchLowStockAlerts(),
+    readRows('oos_log'),
+    readRows('page_sessions'),
+  ]);
+
+  // A product is truly OOS (not just low-stock) when its total inventory across all variants is 0.
+  const byProduct = new Map();
+  for (const a of alerts) {
+    if (!byProduct.has(a.product_id)) {
+      byProduct.set(a.product_id, { product_id: a.product_id, product_title: a.product_title, handle: a.handle, total_inventory: a.total_inventory, variants: [] });
+    }
+    byProduct.get(a.product_id).variants.push(a);
+  }
+  const fullyOos = [...byProduct.values()].filter(p => (parseInt(p.total_inventory, 10) || 0) === 0);
+  const fullyOosIds = new Set(fullyOos.map(p => p.product_id));
+
+  const today = todayIso();
+  const openLogByProduct = new Map();
+  for (const r of log) {
+    if (r.status === 'oos' && !r.restocked_at) openLogByProduct.set(r.product_id, r);
+  }
+
+  // Open new log entries for newly-detected OOS products.
+  const newRows = [];
+  for (const p of fullyOos) {
+    if (!openLogByProduct.has(p.product_id)) {
+      newRows.push([p.product_id, p.product_title, p.handle, p.variants[0]?.sku || '', today, '', 'oos']);
+    }
+  }
+  if (newRows.length) await appendRows('oos_log', newRows);
+
+  // Close out log entries for products that restocked since we last checked.
+  for (const [productId, entry] of openLogByProduct) {
+    if (!fullyOosIds.has(productId)) {
+      await updateRowByKey('oos_log', 'product_id', productId, { restocked_at: today, status: 'restocked' });
+    }
+  }
+
+  // Re-read so oos_since reflects any rows just opened.
+  const freshLog = newRows.length ? await readRows('oos_log') : log;
+  const oosSinceByProduct = new Map();
+  for (const r of freshLog) {
+    if (r.status === 'oos' && !r.restocked_at) oosSinceByProduct.set(r.product_id, r.oos_since);
+  }
+
+  // Sessions per landing page, summed across the full page_sessions history (date-indexed).
+  const sessionsByPage = new Map();
+  for (const r of pageRows) {
+    const sess = parseInt(r.sessions, 10) || 0;
+    if (!sessionsByPage.has(r.landing_page)) sessionsByPage.set(r.landing_page, []);
+    sessionsByPage.get(r.landing_page).push({ date: r.date, sessions: sess });
+  }
+
+  const result = fullyOos.map(p => {
+    const oosSince = oosSinceByProduct.get(p.product_id) || today;
+    const landingPage = p.handle ? `/products/${p.handle}` : null;
+    const pageEntries = landingPage ? (sessionsByPage.get(landingPage) || []) : [];
+    const sessionsDuringOos = pageEntries
+      .filter(e => e.date >= oosSince)
+      .reduce((s, e) => s + e.sessions, 0);
+
+    return {
+      product_id: p.product_id,
+      product_title: p.product_title,
+      handle: p.handle,
+      landing_page: landingPage,
+      sku: p.variants[0]?.sku || '',
+      oos_since: oosSince,
+      sessions_during_oos: sessionsDuringOos,
+    };
+  }).sort((a, b) => b.sessions_during_oos - a.sessions_during_oos);
+
+  return { alerts, oosWithSessions: result };
 }

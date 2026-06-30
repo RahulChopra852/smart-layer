@@ -1,6 +1,6 @@
 import express from 'express';
 import {
-  getHeroProducts, getCommerceSnapshot, getPagePerformance, getCroFunnelDeltas, getWebVitalsFlags, getProductInsights
+  getHeroProducts, getCommerceSnapshot, getPagePerformance, getCroFunnelDeltas, getWebVitalsFlags, getProductInsights, getOosWithSessions
 } from '../services/analytics.js';
 import { readRows } from '../db/sheetsDb.js';
 import { fetchAnomalies, fetchDailyVisitors } from '../services/croSheets.js';
@@ -434,7 +434,7 @@ router.get('/rca-snapshot', async (req, res) => {
     const affectedPages = Object.keys({ ...pagesToday, ...pagesYesterday })
       .map(page => {
         const t = pagesToday[page] || 0, yFull = pagesYesterday[page] || 0;
-        const yAtH = yesterdayAtHour(yFull);
+        const yAtH = estAtHour(yFull);
         const change = yAtH > 0 ? parseFloat(((t - yAtH) / yAtH * 100).toFixed(1)) : (t > 0 ? 100 : 0);
         return { page, today: t, yesterdayAtHour: yAtH, yesterdayFull: yFull, change };
       })
@@ -501,6 +501,14 @@ router.get('/gokwik-landing-pages', async (req, res) => {
 router.get('/low-stock', async (req, res) => {
   try {
     res.json({ alerts: await fetchLowStockAlerts() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/oos-sessions', async (req, res) => {
+  try {
+    res.json(await getOosWithSessions());
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
