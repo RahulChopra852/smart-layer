@@ -25,7 +25,9 @@ function isStale(lastSyncedDate) {
 }
 
 export default function PagePerformance({ start, end, mode = 'top' }) {
-  const { data, loading, error } = useApi(`/api/analytics/page-performance?start=${start}&end=${end}`);
+  const [rangeStart, setRangeStart] = useState(start);
+  const [rangeEnd, setRangeEnd] = useState(end);
+  const { data, loading, error } = useApi(`/api/analytics/page-performance?start=${rangeStart}&end=${rangeEnd}`);
   const { data: syncStatus } = useApi('/api/sync/status');
   const allPages = data?.pages || [];
 
@@ -46,13 +48,13 @@ export default function PagePerformance({ start, end, mode = 'top' }) {
       <div className="flex items-center justify-between mb-1">
         <div>
           <h2 className="text-base font-semibold text-text-primary">{title}</h2>
-          <p className="text-xs text-text-muted mt-0.5">{subtitle}</p>
+          <p className="text-xs text-text-muted mt-0.5">{subtitle} — totals summed over the selected range</p>
         </div>
         <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${isTop ? 'bg-accent/15 text-accent' : 'bg-warning/15 text-warning'}`}>
           {pages.length} {isTop ? 'pages' : 'flagged'}
         </span>
       </div>
-      <div className="mb-3">
+      <div className="flex items-center justify-between mb-3 gap-3">
         {lastSynced ? (
           <span className={`text-[10px] font-medium ${stale ? 'text-negative' : 'text-positive'}`}>
             Data as of {lastSynced}{stale ? ` (${daysBehind}d behind)` : ' (current)'}
@@ -60,6 +62,23 @@ export default function PagePerformance({ start, end, mode = 'top' }) {
         ) : (
           <span className="text-[10px] text-text-muted">Sync status unknown</span>
         )}
+        <div className="flex items-center gap-1.5">
+          <input
+            type="date"
+            value={rangeStart}
+            max={rangeEnd}
+            onChange={e => setRangeStart(e.target.value)}
+            className="bg-bg border border-border text-text-primary text-[11px] px-2 py-1 rounded-md focus:outline-none focus:border-accent"
+          />
+          <span className="text-[10px] text-text-muted">to</span>
+          <input
+            type="date"
+            value={rangeEnd}
+            min={rangeStart}
+            onChange={e => setRangeEnd(e.target.value)}
+            className="bg-bg border border-border text-text-primary text-[11px] px-2 py-1 rounded-md focus:outline-none focus:border-accent"
+          />
+        </div>
       </div>
 
       {loading ? (
@@ -74,7 +93,7 @@ export default function PagePerformance({ start, end, mode = 'top' }) {
           {isTop ? 'No page data for this range' : 'No underperforming pages found'}
         </p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto overflow-y-auto max-h-[420px]">
           <table className="w-full">
             <thead className="sticky top-0 z-[2] bg-card">
               <tr className="border-b border-border">

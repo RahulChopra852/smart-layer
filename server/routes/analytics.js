@@ -2,7 +2,8 @@ import express from 'express';
 import {
   getHeroProducts, getCommerceSnapshot, getPagePerformance, getCroFunnelDeltas, getWebVitalsFlags, getProductInsights, getOosWithSessions
 } from '../services/analytics.js';
-import { readRows } from '../db/sheetsDb.js';
+import { readRows, updateRowByKey } from '../db/supabaseDb.js';
+import { generateAbTest } from '../services/abTests.js';
 import { fetchAnomalies, fetchDailyVisitors } from '../services/croSheets.js';
 import { getAppOverview, getWebOverview } from '../services/ga.js';
 import { getAlerts } from '../services/alerts.js';
@@ -150,7 +151,7 @@ router.post('/vwo-campaigns', async (req, res) => {
   const { campaigns } = req.body;
   if (!campaigns?.length) return res.status(400).json({ error: 'campaigns array required' });
   try {
-    const { clearTab, appendRows } = await import('../db/sheetsDb.js');
+    const { clearTab, appendRows } = await import('../db/supabaseDb.js');
     await clearTab('vwo_campaigns');
     const rows = campaigns.map(c => [
       c.id, c.name, c.status, c.started, c.goal, c.type, c.visitors,
@@ -182,7 +183,7 @@ router.post('/vwo-sync', async (req, res) => {
     const headers = values[0].map(h => h.trim().toLowerCase().replace(/\s+/g, '_'));
     const col = (name) => headers.indexOf(name);
 
-    const { clearTab, appendRows } = await import('../db/sheetsDb.js');
+    const { clearTab, appendRows } = await import('../db/supabaseDb.js');
     await clearTab('vwo_campaigns');
 
     const abTests = [];
@@ -509,6 +510,39 @@ router.get('/low-stock', async (req, res) => {
 router.get('/oos-sessions', async (req, res) => {
   try {
     res.json(await getOosWithSessions());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/ab-tests', async (req, res) => {
+  try {
+    const rows = await readRows('ab_tests');
+    res.json({ tests: rows.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/ab-tests/generate', async (req, res) => {
+  const { metric, area } = req.body;
+  if (!metric || !area) return res.status(400).json({ error: 'metric and area required' });
+  try {
+    const test = await generateAbTest(metric, area);
+    res.json({ test });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/ab-tests/:id/status', async (req, res) => {
+  const { status } = req.body;
+  const validStatuses = ['picked_up', 'already_exists', 'ab_completed', null];
+  if (!validStatuses.includes(status)) return res.status(400).json({ error: 'invalid status' });
+  try {
+    const ok = await updateRowByKey('ab_tests', 'id', req.params.id, { status });
+    if (!ok) return res.status(404).json({ error: 'test not found' });
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

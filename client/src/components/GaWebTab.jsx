@@ -56,7 +56,7 @@ export default function GaWebTab({ start, end }) {
           <KpiCard label="Sessions" value={fmt(latest?.sessions)} prev={prev?.sessions} />
           <KpiCard label="Bounce Rate" value={pctD(latest?.bounceRate)} />
           <KpiCard label="Avg Duration" value={fmtDur(latest?.averageSessionDuration)} />
-          <KpiCard label="Conversions" value={fmt(latest?.conversions)} prev={prev?.conversions} />
+          <KpiCard label="Purchases" value={fmt(latest?.conversions)} prev={prev?.conversions} />
         </div>
       </div>
 
@@ -68,7 +68,7 @@ export default function GaWebTab({ start, end }) {
           <KpiCard label="New Users" value={fmt(totals.newUsers)} />
           <KpiCard label="Sessions" value={fmt(totals.sessions)} />
           <KpiCard label="Page Views" value={fmt(totals.pageViews)} />
-          <KpiCard label="Conversions" value={fmt(totals.conversions)} />
+          <KpiCard label="Purchases" value={fmt(totals.conversions)} />
         </div>
       </div>
 
@@ -79,7 +79,7 @@ export default function GaWebTab({ start, end }) {
           <table className="w-full">
             <thead className="sticky top-0 z-[2] bg-card">
               <tr className="border-b border-border">
-                {['Date', 'Active Users', 'New Users', 'Sessions', 'Engaged', 'Bounce Rate', 'Avg Duration', 'Page Views', 'Conversions'].map(h => (
+                {['Date', 'Active Users', 'New Users', 'Sessions', 'Engaged', 'Bounce Rate', 'Avg Duration', 'Page Views', 'Purchases'].map(h => (
                   <th key={h} className={`text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3 ${h === 'Date' ? 'text-left' : 'text-right'}`}>{h}</th>
                 ))}
               </tr>
@@ -118,7 +118,7 @@ export default function GaWebTab({ start, end }) {
                   <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Sessions</th>
                   <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Users</th>
                   <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">New Users</th>
-                  <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Conversions</th>
+                  <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Purchases</th>
                 </tr>
               </thead>
               <tbody>
@@ -145,7 +145,7 @@ export default function GaWebTab({ start, end }) {
                   <th className="text-left text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Source</th>
                   <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Sessions</th>
                   <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Users</th>
-                  <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Conversions</th>
+                  <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Purchases</th>
                 </tr>
               </thead>
               <tbody>

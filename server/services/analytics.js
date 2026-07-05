@@ -1,4 +1,4 @@
-import { readRows, appendRows, updateRowByKey } from '../db/sheetsDb.js';
+import { readRows, appendRows, updateRowByKey } from '../db/supabaseDb.js';
 import { fetchLowStockAlerts } from './shopify.js';
 
 function dateDaysAgo(n) {

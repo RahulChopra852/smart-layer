@@ -1,6 +1,6 @@
 import express from 'express';
 import { addManualNote, getNotesInRange, findUnexplainedAnomalies } from '../services/rca.js';
-import { readRows } from '../db/sheetsDb.js';
+import { readRows } from '../db/supabaseDb.js';
 
 const router = express.Router();
 

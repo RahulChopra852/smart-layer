@@ -92,6 +92,12 @@ export async function fetchCroWebSince(sinceDate, tabName = 'CRO-Auto') {
     const date = parseDateCell(row[idx.date]);
     if (sinceDate && date <= sinceDate) continue;
 
+    // Skip empty template rows (dates pre-filled ahead of time with no metrics entered yet) —
+    // check Sessions specifically, since other cells (e.g. Orders) can hold a literal 0 rather
+    // than being blank. Otherwise the watermark advances past real data that hasn't been
+    // entered yet, silently blocking it from ever being synced once it is.
+    if (toNum(row[idx.sessions]) == null) continue;
+
     rows.push([
       date, 'web',
       toNum(row[idx.sessions]), toNum(row[idx.webSess]), toNum(row[idx.appSess]),
@@ -148,11 +154,21 @@ export async function fetchCroAppSince(sinceDate, tabName = 'Funnel(App)') {
     const date = parseDateCell(row[idx.date]);
     if (sinceDate && date <= sinceDate) continue;
 
+    const sessions = toNum(row[idx.sessions]);
+    const atc = toNum(row[idx.atc]);
+    const orders = toNum(row[idx.orders]);
+    // Skip empty template rows — the sheet has dates pre-filled for future days with no metrics
+    // entered yet (some cells, like Orders, hold a literal 0 rather than being blank, so check
+    // Sessions specifically — the one column that's always populated once a day's data is real).
+    // Treating a template row as "synced" would advance the watermark past real data that hasn't
+    // been entered yet, silently blocking it from ever being picked up.
+    if (sessions == null) continue;
+
     rows.push([
       date, 'app',
-      toNum(row[idx.sessions]), null, null,
-      toNum(row[idx.atc]), toNum(row[idx.ic]), toNum(row[idx.rpp]),
-      toNum(row[idx.orders]), null, null,
+      sessions, null, null,
+      atc, toNum(row[idx.ic]), toNum(row[idx.rpp]),
+      orders, null, null,
       toNum(row[idx.atcPct]), toNum(row[idx.icPct]), toNum(row[idx.rppPct]), toNum(row[idx.cvrPct]),
       null, null,
       toNum(row[idx.atcToCi]), toNum(row[idx.ciToRpp]), toNum(row[idx.rppToOrd]),

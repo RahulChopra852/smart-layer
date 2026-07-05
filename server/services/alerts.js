@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { readRows, appendRows } from '../db/sheetsDb.js';
+import { readRows, appendRows } from '../db/supabaseDb.js';
 import { fetchCroWebSince } from './croSheets.js';
 
 const WEB_CVR_DROP_THRESHOLD = 20; // alert if web CVR drops >20% vs previous day

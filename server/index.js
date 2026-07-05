@@ -2,7 +2,7 @@ import express from 'express';
 import 'dotenv/config';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ensureTabs } from './db/sheetsDb.js';
+import { ensureTabs } from './db/supabaseDb.js';
 
 import syncRoutes from './routes/sync.js';
 import metaRoutes from './routes/meta.js';

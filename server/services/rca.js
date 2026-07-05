@@ -1,24 +1,11 @@
-import { appendRows, readRows } from '../db/sheetsDb.js';
-
-let rcaIdCounter = null; // lazily initialized from existing sheet data
-
-async function nextRcaId() {
-  if (rcaIdCounter === null) {
-    const existing = await readRows('rca_notes');
-    const maxId = existing.reduce((max, r) => Math.max(max, parseInt(r.id, 10) || 0), 0);
-    rcaIdCounter = maxId;
-  }
-  rcaIdCounter += 1;
-  return rcaIdCounter;
-}
+import { appendRows, readRows } from '../db/supabaseDb.js';
 
 // Adds a manually-entered RCA note. metricTag is free text (e.g. 'atc_pct', 'web_vitals', 'meta_spend')
 // so the person tags what the note explains — no fixed taxonomy enforced in v1.
 export async function addManualNote(date, metricTag, note) {
-  const id = await nextRcaId();
   const createdAt = new Date().toISOString();
-  await appendRows('rca_notes', [[id, date, 'manual', metricTag, note, createdAt]]);
-  return { id, date, source: 'manual', metric_tag: metricTag, note, created_at: createdAt };
+  const [saved] = await appendRows('rca_notes', [[null, date, 'manual', metricTag, note, createdAt]]);
+  return saved;
 }
 
 // Appends inferred-comment candidates (from croSheets.extractCommentsAsRcaCandidates), de-duplicated
@@ -33,13 +20,10 @@ export async function addInferredNotes(candidates) {
   );
 
   const toAdd = candidates.filter(c => !existingKeys.has(`${c.date}|${c.note}`));
-  const rows = [];
-  for (const c of toAdd) {
-    const id = await nextRcaId();
-    rows.push([id, c.date, 'inferred_comment', c.metric_tag, c.note, new Date().toISOString()]);
-  }
-  await appendRows('rca_notes', rows);
-  return { added: rows.length };
+  if (toAdd.length === 0) return { added: 0 };
+  const rows = toAdd.map(c => [null, c.date, 'inferred_comment', c.metric_tag, c.note, new Date().toISOString()]);
+  const inserted = await appendRows('rca_notes', rows);
+  return { added: inserted.length };
 }
 
 // Returns all RCA notes (manual + inferred) for a date range, sorted by date.

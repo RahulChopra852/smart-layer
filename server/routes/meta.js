@@ -1,7 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 import { parseMetaReport } from '../services/metaParser.js';
-import { appendRows } from '../db/sheetsDb.js';
+import { appendRows } from '../db/supabaseDb.js';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
