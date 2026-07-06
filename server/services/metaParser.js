@@ -6,6 +6,9 @@ function toNumOrNull(val) {
   return isNaN(n) ? null : n;
 }
 
+// Must match the literal MetaTab.jsx/SummaryTab.jsx check for on the client.
+export const TOTAL_MARKER = '(account total)';
+
 export function parseMetaReport(fileBuffer) {
   const content = Buffer.isBuffer(fileBuffer) ? fileBuffer.toString('utf-8') : fileBuffer;
   const records = parse(content, {
@@ -30,12 +33,15 @@ export function parseMetaReport(fileBuffer) {
     return '';
   };
 
+  // campaign_name/ad_name are part of meta_reports' primary key (NOT NULL) — Meta's own
+  // "Totals" row exports these blank, so give it a sentinel instead of letting it go through
+  // as an empty string (which sanitize() would turn into a PK-violating null).
   const toRow = (r) => [
     col(r, 'Reporting starts'),
     col(r, 'Reporting ends'),
-    col(r, 'Campaign name'),
+    col(r, 'Campaign name') || TOTAL_MARKER,
     col(r, 'Day'),
-    col(r, 'Ad name'),
+    col(r, 'Ad name') || TOTAL_MARKER,
     toNumOrNull(col(r, 'Amount spent')),
     toNumOrNull(col(r, 'CTR (all)')),
     toNumOrNull(col(r, 'CPM')),

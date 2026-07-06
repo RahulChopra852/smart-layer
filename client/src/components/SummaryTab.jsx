@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import CommerceSnapshot from './CommerceSnapshot';
 
 const pf = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n; };
 const fmt = (v) => v == null ? '—' : v.toLocaleString();
@@ -99,9 +100,12 @@ export default function SummaryTab({ onNavigate }) {
   const gaAppUsers = gaAppRows.reduce((s, r) => s + (r.activeUsers || 0), 0);
 
   // ── Meta ──
+  // '(account total)' is Meta's own CSV "Totals" row (see metaParser.js TOTAL_MARKER) — exclude
+  // it from per-campaign sums/counts here, it'd otherwise double-count spend/purchases.
   const metaReports = data.metaReports?.reports || [];
-  const metaSpend = metaReports.reduce((s, r) => s + (pf(r.amount_spent) || 0), 0);
-  const metaPurchases = metaReports.reduce((s, r) => s + (pf(r.website_purchases) || 0), 0);
+  const metaCampaignRows = metaReports.filter(r => r.campaign_name !== '(account total)');
+  const metaSpend = metaCampaignRows.reduce((s, r) => s + (pf(r.amount_spent) || 0), 0);
+  const metaPurchases = metaCampaignRows.reduce((s, r) => s + (pf(r.website_purchases) || 0), 0);
   const latestMeta = metaReports[0];
 
   // ── PSI / Web Vitals ──
@@ -135,6 +139,9 @@ export default function SummaryTab({ onNavigate }) {
           Overview of all data sources · {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })}
         </p>
       </div>
+
+      {/* Commerce Snapshot */}
+      <CommerceSnapshot />
 
       {/* Top-level KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
@@ -210,7 +217,7 @@ export default function SummaryTab({ onNavigate }) {
           metrics={[
             { label: 'Total Spend', value: fmtCur(metaSpend), color: 'text-negative' },
             { label: 'Purchases', value: fmt(metaPurchases), color: 'text-positive' },
-            { label: 'Campaigns', value: fmt(new Set(metaReports.map(r => r.campaign_name)).size) },
+            { label: 'Campaigns', value: fmt(new Set(metaCampaignRows.map(r => r.campaign_name)).size) },
             { label: 'Reports', value: fmt(metaReports.length) },
           ]}
         />

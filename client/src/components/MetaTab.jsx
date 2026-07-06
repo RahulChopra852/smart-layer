@@ -1,6 +1,10 @@
 import { useState, useCallback, useMemo, Fragment } from 'react';
 import { useApi } from '../hooks/useApi';
 
+// Must match TOTAL_MARKER in server/services/metaParser.js — Meta's CSV "Totals" row is
+// stored with this sentinel instead of a blank campaign_name/ad_name (which the DB rejects).
+const TOTAL_MARKER = '(account total)';
+
 const pf = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n; };
 const x100 = (v) => { const n = pf(v); return n != null ? n * 100 : null; };
 function fmt(n) { if (n == null || isNaN(n)) return '—'; return n.toLocaleString(undefined, { maximumFractionDigits: 2 }); }
@@ -45,19 +49,29 @@ function KpiCard({ label, value, sub, color }) {
   );
 }
 
-function InsightCard({ title, emoji, items, color }) {
+// Every ranked row shares the same subheading — spend, purchases, CTR, CAC — so the only
+// thing that changes between cards is which metric decides the ranking (item.value).
+function InsightCard({ title, emoji, items, color, subtitle }) {
   if (!items.length) return null;
   return (
-    <div className="bg-card border border-border rounded-lg p-4">
-      <h3 className="text-sm font-semibold text-text-primary mb-3">{emoji} {title}</h3>
-      <div className="flex flex-col gap-2">
+    <div className="bg-card border border-border rounded-lg p-4 flex flex-col">
+      <div className="mb-3 shrink-0">
+        <h3 className="text-sm font-semibold text-text-primary">{emoji} {title}</h3>
+        {subtitle && <p className="text-[11px] text-text-muted mt-0.5">{subtitle}</p>}
+      </div>
+      <div className="flex flex-col gap-2 max-h-[480px] overflow-y-auto">
         {items.map((item, i) => (
           <div key={i} className="bg-bg rounded-md p-3 border border-border/50">
             <div className="flex items-start justify-between gap-2">
-              <div className="text-xs font-medium text-text-primary leading-relaxed" title={item.name}>{item.name}</div>
+              <div className="text-xs font-medium text-text-primary leading-relaxed" title={item.name}>
+                {item.name}
+                {item.tag && <div className="text-[10px] font-normal text-text-muted truncate">{item.tag}</div>}
+              </div>
               <div className={`text-sm font-bold ${color} whitespace-nowrap shrink-0`}>{item.value}</div>
             </div>
-            <div className="text-[11px] text-text-muted mt-1">{item.detail}</div>
+            <div className="text-[11px] text-text-muted mt-1">
+              {inr(item.spend)} · {fmt(item.purchases)} purchases · {pctD(item.ctr)} CTR · {inr(item.cac)} CAC
+            </div>
           </div>
         ))}
       </div>
@@ -65,54 +79,111 @@ function InsightCard({ title, emoji, items, color }) {
   );
 }
 
+// Spend-weighted average of a per-day ratio — used for week-level rollups of metrics we can't
+// recompute from counts (Meta gives us only the ratio, not its numerator/denominator).
+function wavg(rows, key, weightKey = 'amount_spent') {
+  let num = 0, den = 0;
+  for (const r of rows) {
+    const v = pf(r[key]); const w = pf(r[weightKey]) || 0;
+    if (v == null || w <= 0) continue;
+    num += v * w; den += w;
+  }
+  return den > 0 ? num / den : null;
+}
+
+// Rolls a set of daily ad rows up to one row per ad (the "Whole week" view). Sums the counts,
+// recomputes the ratios we have both sides of (ROAS, LC→LPV, CI→Order, CVR) from those sums,
+// and spend-weight-averages the rest. Output uses the same field names as a raw DB row so
+// generateInsights / CampaignTable consume it unchanged.
+function aggregateAds(rows) {
+  const byAd = new Map();
+  for (const r of rows) {
+    const key = `${r.campaign_name}|||${r.ad_name || ''}`;
+    if (!byAd.has(key)) byAd.set(key, []);
+    byAd.get(key).push(r);
+  }
+  const out = [];
+  for (const group of byAd.values()) {
+    const sum = (k) => group.reduce((s, r) => s + (pf(r[k]) || 0), 0);
+    const spend = sum('amount_spent');
+    const purchases = sum('website_purchases');
+    const checkouts = sum('website_checkouts');
+    const lpv = sum('lpv');
+    const clicks = sum('link_clicks');
+    const revenue = group.reduce((s, r) => s + (pf(r.website_purchases) || 0) * (pf(r.aov) || 0), 0);
+    out.push({
+      campaign_name: group[0].campaign_name,
+      ad_name: group[0].ad_name,
+      day: null,
+      amount_spent: spend,
+      website_purchases: purchases,
+      website_checkouts: checkouts,
+      lpv, link_clicks: clicks,
+      aov: purchases > 0 ? revenue / purchases : null,
+      roas: spend > 0 ? revenue / spend : null,
+      cost_per_purchase: purchases > 0 ? spend / purchases : null,
+      cost_per_lpv: lpv > 0 ? spend / lpv : null,
+      cvr_pct: clicks > 0 ? purchases / clicks : null,
+      lc_to_lpv: clicks > 0 ? lpv / clicks : null,
+      ci_to_order: checkouts > 0 ? purchases / checkouts : null,
+      lpv_to_a2c: wavg(group, 'lpv_to_a2c'),
+      a2c_to_ci: wavg(group, 'a2c_to_ci'),
+      a2c_to_order: wavg(group, 'a2c_to_order'),
+      hook_rate: wavg(group, 'hook_rate'),
+      ctr_all: wavg(group, 'ctr_all'),
+      ctr_link: wavg(group, 'ctr_link'),
+      cpm: wavg(group, 'cpm'),
+      cpc: clicks > 0 ? spend / clicks : wavg(group, 'cpc'),
+      cost_per_purchase_new_customer: wavg(group, 'cost_per_purchase_new_customer'),
+    });
+  }
+  return out;
+}
+
 function generateInsights(campaigns) {
+  // All funnel ratios are stored as fractions (0.54 = 54%, and some exceed 1.0) → ×100 to show
+  // as %. ROAS is already a multiplier and CTR is already a percent-number, so leave those.
   const c = campaigns.map(r => ({
     name: r.ad_name || r.campaign_name,
     campaign: r.campaign_name,
     spend: pf(r.amount_spent) || 0,
     purchases: pf(r.website_purchases) || 0,
     roas: pf(r.roas),
-    cpp: pf(r.cost_per_purchase),
-    aov: pf(r.aov),
+    ctr: pf(r.ctr_all),
+    cac: pf(r.cost_per_purchase_new_customer),
     lcToLpv: x100(r.lc_to_lpv),
     lpvToA2c: x100(r.lpv_to_a2c),
     a2cToCi: x100(r.a2c_to_ci),
     ciToOrder: x100(r.ci_to_order),
-    hookRate: pf(r.hook_rate),
-    lpv: pf(r.lpv) || 0,
+    hookRate: x100(r.hook_rate),
   })).filter(r => r.spend > 50);
 
   const tag = (r) => r.campaign !== r.name ? r.campaign.slice(0, 40) : '';
+  const toItem = (r, value) => ({ name: r.name, tag: tag(r), value, spend: r.spend, purchases: r.purchases, ctr: r.ctr, cac: r.cac });
 
-  const winners = c.filter(r => r.roas >= 3 && r.purchases >= 3)
-    .sort((a, b) => b.roas - a.roas).slice(0, 7)
-    .map(r => ({ name: r.name, value: `${fmt(r.roas)}x ROAS`, detail: `${tag(r) ? tag(r) + ' · ' : ''}${inr(r.spend)} · ${r.purchases} purchases · ${inr(r.aov)} AOV` }));
+  // Ranks the same metric two ways — worst 20 and best 20 — so an underperformer card always
+  // sits next to its "here's what good looks like" counterpart.
+  function rankPair(valueOf, fmtValue, { minSpend = 0, worstBelow = null, bestFilter = null } = {}) {
+    const eligible = c.filter(r => valueOf(r) != null && r.spend > minSpend);
+    const worstPool = worstBelow != null ? eligible.filter(r => valueOf(r) < worstBelow) : eligible;
+    const worst = [...worstPool].sort((a, b) => valueOf(a) - valueOf(b)).slice(0, 20).map(r => toItem(r, fmtValue(valueOf(r))));
+    // Zero-valued ties are never a real "best" (a run of no-conversion ads) — drop them, then
+    // apply any card-specific floor (e.g. ROAS "scale" candidates need real purchase volume so
+    // a fluke 1-purchase 8x ad doesn't masquerade as a scale-up winner).
+    let bestPool = eligible.filter(r => valueOf(r) > 0);
+    if (bestFilter) bestPool = bestPool.filter(bestFilter);
+    const best = [...bestPool].sort((a, b) => valueOf(b) - valueOf(a)).slice(0, 20).map(r => toItem(r, fmtValue(valueOf(r))));
+    return { worst, best };
+  }
 
-  const losers = c.filter(r => r.roas != null && r.roas < 1.5 && r.spend > 300)
-    .sort((a, b) => a.roas - b.roas).slice(0, 7)
-    .map(r => ({ name: r.name, value: `${fmt(r.roas)}x ROAS`, detail: `${tag(r) ? tag(r) + ' · ' : ''}${inr(r.spend)} · ${r.purchases} purchases · CPP ${inr(r.cpp)}` }));
-
-  const lowLcToLpv = c.filter(r => r.lcToLpv != null && r.lcToLpv < 60 && r.spend > 200)
-    .sort((a, b) => a.lcToLpv - b.lcToLpv).slice(0, 7)
-    .map(r => ({ name: r.name, value: `${pctD(r.lcToLpv)} LC→LPV`, detail: `${tag(r) ? tag(r) + ' · ' : ''}${inr(r.spend)} — clicks not reaching LP` }));
-
-  const funnelLeaks = c.filter(r => r.lpvToA2c != null && r.lpvToA2c < 15 && r.lpv > 50)
-    .sort((a, b) => a.lpvToA2c - b.lpvToA2c).slice(0, 7)
-    .map(r => ({ name: r.name, value: `${pctD(r.lpvToA2c)} LPV→A2C`, detail: `${tag(r) ? tag(r) + ' · ' : ''}${fmt(r.lpv)} LPVs — PDP/offer issue` }));
-
-  const highCpp = c.filter(r => r.cpp != null && r.cpp > 800 && r.purchases >= 1)
-    .sort((a, b) => b.cpp - a.cpp).slice(0, 7)
-    .map(r => ({ name: r.name, value: `${inr(r.cpp)} CPP`, detail: `${tag(r) ? tag(r) + ' · ' : ''}${inr(r.spend)} for ${r.purchases} purchases` }));
-
-  const scalable = c.filter(r => r.roas >= 2.5 && r.spend < 5000 && r.purchases >= 1)
-    .sort((a, b) => b.roas - a.roas).slice(0, 7)
-    .map(r => ({ name: r.name, value: `${fmt(r.roas)}x on ${inr(r.spend)}`, detail: `${tag(r) ? tag(r) + ' · ' : ''}scale budget candidate` }));
-
-  const lowHook = c.filter(r => r.hookRate != null && r.hookRate < 15 && r.spend > 500)
-    .sort((a, b) => a.hookRate - b.hookRate).slice(0, 7)
-    .map(r => ({ name: r.name, value: `${pctD(r.hookRate)} hook`, detail: `${tag(r) ? tag(r) + ' · ' : ''}${inr(r.spend)} — creative not grabbing attention` }));
-
-  return { winners, losers, lowLcToLpv, funnelLeaks, highCpp, scalable, lowHook };
+  return {
+    roasPair: rankPair(r => r.roas, v => `${fmt(v)}x`, { minSpend: 300, worstBelow: 1.5, bestFilter: r => r.purchases >= 3 && r.roas >= 2 }),
+    lcToLpvPair: rankPair(r => r.lcToLpv, v => pctD(v), { minSpend: 200, worstBelow: 50 }),
+    lpvToA2cPair: rankPair(r => r.lpvToA2c, v => pctD(v), { minSpend: 200 }),
+    a2cToCiPair: rankPair(r => r.a2cToCi, v => pctD(v), { minSpend: 200 }),
+    ciToOrderPair: rankPair(r => r.ciToOrder, v => pctD(v), { minSpend: 200 }),
+    hookRatePair: rankPair(r => r.hookRate, v => pctD(v), { minSpend: 500, worstBelow: 20 }),
+  };
 }
 
 function DailyAdAnalysis({ dayData, availableDays }) {
@@ -243,7 +314,7 @@ function AdRow({ c, isAd }) {
       <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{pctD(x100(c.cvr_pct))}</td>
       <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{fmt(pf(c.lpv))}</td>
       <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{fmt(pf(c.link_clicks))}</td>
-      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{pctD(pf(c.hook_rate))}</td>
+      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{pctD(x100(c.hook_rate))}</td>
     </tr>
   );
 }
@@ -330,7 +401,7 @@ function NewAdsLaunched({ dayData, availableDays }) {
           ad: adName, campaign: c.campaign_name, launchDay: day,
           spend: pf(c.amount_spent) || 0, purchases: pf(c.website_purchases) || 0,
           roas: pf(c.roas), cpp: pf(c.cost_per_purchase), aov: pf(c.aov),
-          hookRate: pf(c.hook_rate), ctr: pf(c.ctr_all),
+          hookRate: x100(c.hook_rate), ctr: pf(c.ctr_all),
         });
       }
     }
@@ -426,61 +497,41 @@ function NewAdsLaunched({ dayData, availableDays }) {
 
 export default function MetaTab() {
   const [refreshKey, setRefreshKey] = useState(0);
-  const { data, loading, error } = useApi(`/api/analytics/meta-reports?_k=${refreshKey}`);
+  const { data, loading } = useApi(`/api/analytics/meta-reports?_k=${refreshKey}`);
   const handleUploaded = useCallback(() => setRefreshKey(k => k + 1), []);
   const reports = data?.reports || [];
 
-  const { accountTotal, dayData, availableDays, insights } = useMemo(() => {
-    const totals = reports.filter(r => !r.campaign_name);
+  const { accountTotal, dayData, availableDays } = useMemo(() => {
+    const totals = reports.filter(r => r.campaign_name === TOTAL_MARKER);
     const accountTotal = totals[0] || null;
 
     const dayData = {};
     for (const r of reports) {
-      if (!r.campaign_name) continue;
-      const day = r.day;
-      if (!day) continue;
-      if (!dayData[day]) dayData[day] = { campaigns: [], total: null };
-      dayData[day].campaigns.push(r);
-    }
-
-    // Aggregate totals per day from campaign data
-    for (const [day, dd] of Object.entries(dayData)) {
-      const camps = dd.campaigns;
-      dd.total = {
-        amount_spent: camps.reduce((s, c) => s + (pf(c.amount_spent) || 0), 0),
-        website_purchases: camps.reduce((s, c) => s + (pf(c.website_purchases) || 0), 0),
-        website_checkouts: camps.reduce((s, c) => s + (pf(c.website_checkouts) || 0), 0),
-        lpv: camps.reduce((s, c) => s + (pf(c.lpv) || 0), 0),
-        link_clicks: camps.reduce((s, c) => s + (pf(c.link_clicks) || 0), 0),
-      };
-      const t = dd.total;
-      const totalRevenue = camps.reduce((s, c) => s + (pf(c.website_purchases) || 0) * (pf(c.aov) || 0), 0);
-      t.roas = t.amount_spent > 0 ? totalRevenue / t.amount_spent : null;
-      t.aov = t.website_purchases > 0 ? totalRevenue / t.website_purchases : null;
-      t.cost_per_purchase = t.website_purchases > 0 ? t.amount_spent / t.website_purchases : null;
-      t.cvr_pct = t.link_clicks > 0 ? t.website_purchases / t.link_clicks : null;
-      t.cpm = camps.reduce((s, c) => s + (pf(c.cpm) || 0) * (pf(c.amount_spent) || 0), 0) / (t.amount_spent || 1);
-      t.lc_to_lpv = t.link_clicks > 0 ? t.lpv / t.link_clicks : null;
-      t.lpv_to_a2c = accountTotal ? pf(accountTotal.lpv_to_a2c) : null;
-      t.a2c_to_ci = accountTotal ? pf(accountTotal.a2c_to_ci) : null;
-      t.ci_to_order = accountTotal ? pf(accountTotal.ci_to_order) : null;
-      t.hook_rate = accountTotal ? pf(accountTotal.hook_rate) : null;
+      if (r.campaign_name === TOTAL_MARKER) continue;
+      if (!r.day) continue;
+      if (!dayData[r.day]) dayData[r.day] = { campaigns: [] };
+      dayData[r.day].campaigns.push(r);
     }
 
     const availableDays = Object.keys(dayData).sort();
-
-    // Use latest day's campaigns for insights
-    const latestDay = availableDays[availableDays.length - 1];
-    const insights = latestDay ? generateInsights(dayData[latestDay].campaigns) : null;
-
-    return { accountTotal, dayData, availableDays, insights };
+    return { accountTotal, dayData, availableDays };
   }, [reports]);
 
-  const [selectedDay, setSelectedDay] = useState(null);
+  // 'week' rolls every uploaded day up per ad; otherwise show a specific day's raw rows.
+  const [range, setRange] = useState('week');
 
-  const activeDay = selectedDay || availableDays[availableDays.length - 1];
+  const activeCampaigns = useMemo(() => {
+    if (!availableDays.length) return [];
+    if (range === 'week') return aggregateAds(availableDays.flatMap(d => dayData[d].campaigns));
+    return dayData[range]?.campaigns || [];
+  }, [range, dayData, availableDays]);
 
-  const activeDayData = dayData[activeDay];
+  const insights = useMemo(
+    () => (activeCampaigns.length ? generateInsights(activeCampaigns) : null),
+    [activeCampaigns]
+  );
+
+  const rangeLabel = range === 'week' ? 'Whole week' : range;
 
   return (
     <div className="flex flex-col gap-4">
@@ -519,7 +570,7 @@ export default function MetaTab() {
               <KpiCard label="A2C → CI" value={pctD(x100(accountTotal.a2c_to_ci))} />
               <KpiCard label="CI → Order" value={pctD(x100(accountTotal.ci_to_order))} />
               <KpiCard label="CVR" value={pctD(x100(accountTotal.cvr_pct))} />
-              <KpiCard label="Hook Rate" value={pctD(pf(accountTotal.hook_rate))} />
+              <KpiCard label="Hook Rate" value={pctD(x100(accountTotal.hook_rate))} />
             </div>
           </>
         ) : (
@@ -527,16 +578,51 @@ export default function MetaTab() {
         )}
       </div>
 
-      {/* Insights */}
-      {insights && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <InsightCard title="Top Winners" emoji="🏆" items={insights.winners} color="text-positive" />
-          <InsightCard title="Underperformers" emoji="🔻" items={insights.losers} color="text-negative" />
-          <InsightCard title="Low LC → LPV (<60%)" emoji="🔗" items={insights.lowLcToLpv} color="text-warning" />
-          <InsightCard title="Funnel Leaks (LPV→A2C <15%)" emoji="🚰" items={insights.funnelLeaks} color="text-warning" />
-          <InsightCard title="High CPP (>₹1K)" emoji="💸" items={insights.highCpp} color="text-negative" />
-          <InsightCard title="Ready to Scale" emoji="🚀" items={insights.scalable} color="text-accent" />
-          <InsightCard title="Low Hook Rate (<20%)" emoji="🎣" items={insights.lowHook} color="text-warning" />
+      {/* Performance insights — pick a day or the whole week, then compare worst vs best per metric */}
+      {availableDays.length > 0 && (
+        <div className="flex flex-col gap-4">
+          <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-medium text-text-secondary mr-1">View:</span>
+            <button onClick={() => setRange('week')}
+              className={`px-3 py-1 text-xs rounded-md border transition-colors ${range === 'week' ? 'bg-accent text-white border-accent' : 'bg-bg text-text-secondary border-border hover:border-accent/50'}`}>
+              Whole week
+            </button>
+            {availableDays.map(d => (
+              <button key={d} onClick={() => setRange(d)}
+                className={`px-3 py-1 text-xs rounded-md border transition-colors ${range === d ? 'bg-accent text-white border-accent' : 'bg-bg text-text-secondary border-border hover:border-accent/50'}`}>
+                {d}
+              </button>
+            ))}
+          </div>
+
+          {insights && (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <InsightCard title="Underperformers" emoji="🔻" subtitle="Ranked by ROAS (revenue ÷ ad spend) — lowest first" items={insights.roasPair.worst} color="text-negative" />
+                <InsightCard title="Ready to Scale" emoji="🚀" subtitle="Ranked by ROAS — profitable ads (≥2x, ≥3 purchases)" items={insights.roasPair.best} color="text-positive" />
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <InsightCard title="Low LC → LPV (<50%)" emoji="🔗" subtitle="Link clicks that reach the landing page" items={insights.lcToLpvPair.worst} color="text-negative" />
+                <InsightCard title="High LC → LPV" emoji="🔗" subtitle="Link clicks that reach the landing page" items={insights.lcToLpvPair.best} color="text-positive" />
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <InsightCard title="Low LPV → ATC" emoji="🛒" subtitle="Landing-page views that add to cart" items={insights.lpvToA2cPair.worst} color="text-negative" />
+                <InsightCard title="High LPV → ATC" emoji="🛒" subtitle="Landing-page views that add to cart" items={insights.lpvToA2cPair.best} color="text-positive" />
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <InsightCard title="Low A2C → CI" emoji="💳" subtitle="Add-to-carts that reach checkout" items={insights.a2cToCiPair.worst} color="text-negative" />
+                <InsightCard title="High A2C → CI" emoji="💳" subtitle="Add-to-carts that reach checkout" items={insights.a2cToCiPair.best} color="text-positive" />
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <InsightCard title="Low CI → Order" emoji="📦" subtitle="Checkouts that complete an order" items={insights.ciToOrderPair.worst} color="text-negative" />
+                <InsightCard title="High CI → Order" emoji="📦" subtitle="Checkouts that complete an order" items={insights.ciToOrderPair.best} color="text-positive" />
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <InsightCard title="Low Hook Rate (<20%)" emoji="🎣" subtitle="3-sec video views ÷ impressions" items={insights.hookRatePair.worst} color="text-negative" />
+                <InsightCard title="High Hook Rate" emoji="🎣" subtitle="3-sec video views ÷ impressions" items={insights.hookRatePair.best} color="text-positive" />
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -545,19 +631,19 @@ export default function MetaTab() {
         <NewAdsLaunched dayData={dayData} availableDays={availableDays} />
       )}
 
-      {/* Campaign table for selected day */}
-      {activeDayData?.campaigns.length > 0 && (
+      {/* Campaign table — follows the same day/week selector as the insights above */}
+      {activeCampaigns.length > 0 && (
         <div className="bg-card border border-border rounded-lg p-4">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-base font-semibold text-text-primary">All Campaigns — {activeDay}</h2>
+              <h2 className="text-base font-semibold text-text-primary">All Campaigns — {rangeLabel}</h2>
               <p className="text-xs text-text-muted mt-0.5">Sorted by spend</p>
             </div>
             <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-accent/15 text-accent">
-              {activeDayData.campaigns.length} campaigns
+              {activeCampaigns.length} ads
             </span>
           </div>
-          <CampaignTable campaigns={activeDayData.campaigns} />
+          <CampaignTable campaigns={activeCampaigns} />
         </div>
       )}
     </div>

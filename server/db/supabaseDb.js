@@ -18,7 +18,6 @@ export const TAB_SCHEMAS = {
   rca_notes: ['id', 'date', 'source', 'metric_tag', 'note', 'created_at'],
   vwo_campaigns: ['id', 'name', 'status', 'started', 'goal', 'type', 'visitors', 'control_conv', 'control_visitors', 'control_rate', 'control_rpv', 'var_conv', 'var_visitors', 'var_rate', 'var_rpv', 'improvement', 'confidence', 'variations', 'synced_at'],
   psi_daily: ['date', 'page', 'lcp', 'fcp', 'inp', 'cls', 'ttfb', 'speed_index', 'performance', 'lcp_avg3d', 'fcp_avg3d', 'perf_avg3d', 'alerts'],
-  alerts: ['id', 'created_at', 'type', 'metric', 'current_value', 'previous_value', 'change_pct', 'threshold', 'status', 'message'],
   ga_app_daily: ['date', 'platform', 'active_users', 'new_users', 'sessions', 'engaged_sessions', 'screen_page_views', 'avg_session_duration', 'event_count'],
   gokwik_daily: [
     'date', 'total_orders', 'prepaid_orders', 'cod_orders',
@@ -64,7 +63,6 @@ const UPSERT_KEYS = {
   rca_notes: [],
   vwo_campaigns: ['id'],
   psi_daily: ['date', 'page'],
-  alerts: [],
   ga_app_daily: ['date', 'platform'],
   gokwik_daily: ['date'],
   google_ads_daily: ['date'],

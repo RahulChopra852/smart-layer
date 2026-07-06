@@ -3,6 +3,7 @@ import CroFunnel from './CroFunnel';
 import PagePerformance from './PagePerformance';
 import DayTrend from './DayTrend';
 import RcaSnapshot, { useRcaProblems } from './RcaSnapshot';
+import CommerceSnapshot from './CommerceSnapshot';
 import { useApi } from '../hooks/useApi';
 
 function fmt(n) { return n != null ? n.toLocaleString() : '—'; }
@@ -348,6 +349,7 @@ export default function CroDashboard({ start, end }) {
         </div>
         <CroSyncBar onSynced={() => setRefreshKey(k => k + 1)} />
       </div>
+      <CommerceSnapshot key={`commerce-${refreshKey}`} />
       <RcaSnapshot key={`rca-${refreshKey}`} />
       <DayTrend key={`daytrend-${refreshKey}`} />
       <CroFunnel start={start} end={end} key={`funnel-${refreshKey}`} />

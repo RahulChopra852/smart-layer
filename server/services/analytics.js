@@ -7,81 +7,94 @@ function dateDaysAgo(n) {
   return d.toISOString().slice(0, 10);
 }
 
-// Top N products by units sold within a date range, with prior-period comparison for the same range length.
-export async function getHeroProducts(startDate, endDate, limit = 5) {
-  const rows = await readRows('shopify_products');
-  const inRange = rows.filter(r => r.date >= startDate && r.date <= endDate);
-
-  const rangeDays = (new Date(endDate) - new Date(startDate)) / 86400000 + 1;
-  const priorStart = new Date(new Date(startDate).getTime() - rangeDays * 86400000).toISOString().slice(0, 10);
-  const priorEnd = new Date(new Date(startDate).getTime() - 86400000).toISOString().slice(0, 10);
-  const priorRange = rows.filter(r => r.date >= priorStart && r.date <= priorEnd);
-
-  const sumByProduct = (data) => {
-    const map = new Map();
-    for (const r of data) {
-      const units = parseInt(r.units_sold, 10) || 0;
-      if (!map.has(r.product_id)) map.set(r.product_id, { product_id: r.product_id, product_title: r.product_title, units_sold: 0 });
-      map.get(r.product_id).units_sold += units;
-    }
-    return map;
-  };
-
-  const current = sumByProduct(inRange);
-  const prior = sumByProduct(priorRange);
-
-  const ranked = [...current.values()]
-    .sort((a, b) => b.units_sold - a.units_sold)
-    .slice(0, limit)
-    .map(p => {
-      const priorUnits = prior.get(p.product_id)?.units_sold || 0;
-      const delta = p.units_sold - priorUnits;
-      const deltaPct = priorUnits > 0 ? (delta / priorUnits) * 100 : null;
-      return { ...p, priorUnits, delta, deltaPct };
-    });
-
-  return ranked;
-}
-
-// Commerce snapshot — total units/orders for a range plus DoD comparison (today vs yesterday) and
-// WoW comparison (this 7d window vs prior 7d window), all computed from already-synced data.
+// Commerce snapshot — two data sources on two different refresh schedules:
+//
+// - Orders (total/web/app) come from cro_daily (channel='web' row carries Total/Web/App Orders
+//   straight from the CRO-Auto sheet). The sheet is cheap to poll, so it's synced every 2 minutes
+//   (see server/services/scheduler.js) — "today" here is genuinely live.
+// - Revenue and units-sold come from shopify_daily via the Shopify Orders API, which we
+//   deliberately do NOT poll through the day to avoid hammering Shopify — it's synced once a
+//   night at 00:15 (see scheduler.js), picking up the full prior day in one pass. So "today"
+//   never has a meaningful shopify_daily row until that night's run; the freshest complete
+//   figure is always "yesterday", and DoD compares yesterday vs the day before.
 export async function getCommerceSnapshot() {
-  const rows = await readRows('shopify_daily');
-  const byDate = new Map(rows.map(r => [r.date, r]));
+  const [shopifyRows, croRows, syncState] = await Promise.all([
+    readRows('shopify_daily'), readRows('cro_daily'), readRows('_sync_state')
+  ]);
+  const shopifyByDate = new Map(shopifyRows.map(r => [r.date, r]));
+  const croWebByDate = new Map(croRows.filter(r => r.channel === 'web').map(r => [r.date, r]));
+  const shopifyOrdersSyncedAt = syncState.find(s => s.source === 'shopify_orders')?.last_synced_at || null;
+
+  const ordersFor = (date) => {
+    const r = croWebByDate.get(date);
+    return {
+      total: parseInt(r?.orders, 10) || 0,
+      web: parseInt(r?.web_orders, 10) || 0,
+      app: parseInt(r?.app_orders, 10) || 0,
+    };
+  };
+  const revenueFor = (date) => {
+    const r = shopifyByDate.get(date);
+    return { units: parseInt(r?.units_sold, 10) || 0, revenue: parseFloat(r?.revenue) || 0 };
+  };
 
   const today = dateDaysAgo(0);
   const yesterday = dateDaysAgo(1);
-  const todayRow = byDate.get(today);
-  const yesterdayRow = byDate.get(yesterday);
+  const dayBefore = dateDaysAgo(2);
 
-  const sumRange = (start, end) => {
-    let orders = 0, units = 0, revenue = 0;
-    for (const r of rows) {
+  const ordersSumRange = (start, end) => {
+    let total = 0, web = 0, app = 0;
+    for (const r of croRows) {
+      if (r.channel === 'web' && r.date >= start && r.date <= end) {
+        total += parseInt(r.orders, 10) || 0;
+        web += parseInt(r.web_orders, 10) || 0;
+        app += parseInt(r.app_orders, 10) || 0;
+      }
+    }
+    return { total, web, app };
+  };
+  const revenueSumRange = (start, end) => {
+    let units = 0, revenue = 0;
+    for (const r of shopifyRows) {
       if (r.date >= start && r.date <= end) {
-        orders += parseInt(r.order_count, 10) || 0;
         units += parseInt(r.units_sold, 10) || 0;
         revenue += parseFloat(r.revenue) || 0;
       }
     }
-    return { orders, units, revenue };
+    return { units, revenue };
   };
 
-  const last7 = sumRange(dateDaysAgo(6), dateDaysAgo(0));
-  const prior7 = sumRange(dateDaysAgo(13), dateDaysAgo(7));
+  const todayOrders = ordersFor(today);
+  const yesterdayOrders = ordersFor(yesterday);
+  const yesterdayRevenue = revenueFor(yesterday);
+  const dayBeforeRevenue = revenueFor(dayBefore);
+
+  // Orders trend ends today (live, cheap). Revenue/units trend ends yesterday (last complete
+  // Shopify day) so it doesn't silently include an always-empty "today".
+  const ordersLast7 = ordersSumRange(dateDaysAgo(6), today);
+  const ordersPrior7 = ordersSumRange(dateDaysAgo(13), dateDaysAgo(7));
+  const revenueLast7 = revenueSumRange(dateDaysAgo(7), yesterday);
+  const revenuePrior7 = revenueSumRange(dateDaysAgo(14), dateDaysAgo(8));
 
   return {
-    today: todayRow || null,
-    yesterday: yesterdayRow || null,
-    dod: {
-      orderDelta: (parseInt(todayRow?.order_count, 10) || 0) - (parseInt(yesterdayRow?.order_count, 10) || 0),
-      unitsDelta: (parseInt(todayRow?.units_sold, 10) || 0) - (parseInt(yesterdayRow?.units_sold, 10) || 0)
+    orders: {
+      today: { date: today, ...todayOrders },
+      yesterday: { date: yesterday, ...yesterdayOrders },
+      dodDelta: todayOrders.total - yesterdayOrders.total,
+      last7: { ...ordersLast7 },
+      prior7: { ...ordersPrior7 },
+      wowDelta: ordersLast7.total - ordersPrior7.total,
     },
-    last7,
-    prior7,
-    wow: {
-      orderDelta: last7.orders - prior7.orders,
-      unitsDelta: last7.units - prior7.units,
-      revenueDelta: last7.revenue - prior7.revenue
+    revenue: {
+      yesterday: { date: yesterday, ...yesterdayRevenue },
+      dayBefore: { date: dayBefore, ...dayBeforeRevenue },
+      dodUnitsDelta: yesterdayRevenue.units - dayBeforeRevenue.units,
+      dodRevenueDelta: yesterdayRevenue.revenue - dayBeforeRevenue.revenue,
+      last7: revenueLast7,
+      prior7: revenuePrior7,
+      wowUnitsDelta: revenueLast7.units - revenuePrior7.units,
+      wowRevenueDelta: revenueLast7.revenue - revenuePrior7.revenue,
+      lastSyncedAt: shopifyOrdersSyncedAt,
     }
   };
 }

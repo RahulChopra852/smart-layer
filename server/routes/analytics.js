@@ -1,12 +1,11 @@
 import express from 'express';
 import {
-  getHeroProducts, getCommerceSnapshot, getPagePerformance, getCroFunnelDeltas, getWebVitalsFlags, getProductInsights, getOosWithSessions
+  getCommerceSnapshot, getPagePerformance, getCroFunnelDeltas, getWebVitalsFlags, getProductInsights, getOosWithSessions
 } from '../services/analytics.js';
 import { readRows, updateRowByKey } from '../db/supabaseDb.js';
 import { generateAbTest } from '../services/abTests.js';
 import { fetchAnomalies, fetchDailyVisitors } from '../services/croSheets.js';
 import { getAppOverview, getWebOverview } from '../services/ga.js';
-import { getAlerts } from '../services/alerts.js';
 import { fetchLowStockAlerts, fetchHourlyOrders } from '../services/shopify.js';
 
 const router = express.Router();
@@ -14,16 +13,6 @@ const router = express.Router();
 router.get('/commerce-snapshot', async (req, res) => {
   try {
     res.json(await getCommerceSnapshot());
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.get('/hero-products', async (req, res) => {
-  const { start, end, limit } = req.query;
-  if (!start || !end) return res.status(400).json({ error: 'start and end query params required' });
-  try {
-    res.json({ products: await getHeroProducts(start, end, limit ? parseInt(limit, 10) : 5) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -125,15 +114,6 @@ router.get('/ga-web', async (req, res) => {
 router.get('/meta-reports', async (req, res) => {
   try {
     res.json({ reports: await readRows('meta_reports') });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.get('/alerts', async (req, res) => {
-  const { limit } = req.query;
-  try {
-    res.json({ alerts: await getAlerts(limit ? parseInt(limit, 10) : 50) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

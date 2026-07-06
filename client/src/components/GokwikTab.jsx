@@ -290,6 +290,87 @@ function LandingPagesSection({ selectedDate }) {
   );
 }
 
+/* ── Line chart used by Loyalty Points DoD ── */
+function LineChart({ data, valueFmt = (v) => `₹${v.toLocaleString()}` }) {
+  const [hoverIdx, setHoverIdx] = useState(null);
+  if (!data.length) return null;
+
+  const w = 600, h = 260, padX = 44, padY = 20;
+  const innerW = w - padX * 2, innerH = h - padY * 2;
+  const values = data.map(d => d.value).filter(v => v > 0);
+  const rawMax = Math.max(...values);
+  const rawMin = Math.min(...values);
+  // Log scale, not linear — this series jumps ~6-8x partway through (₹22-38k early on,
+  // ₹180k+ later). A linear axis has to fit both on the same pixel range, which flattens the
+  // early week's real ~65% swings into a barely-visible sliver near the bottom. Log space
+  // shows proportional change instead of absolute change, so both halves read clearly.
+  const logMin = Math.log(rawMin || 1);
+  const logMax = Math.log(rawMax || 1);
+  const logRange = (logMax - logMin) || 1;
+  const pad = logRange * 0.03;
+  const max = logMax + pad;
+  const min = logMin - pad;
+  const range = (max - min) || 1;
+  const stepX = data.length > 1 ? innerW / (data.length - 1) : 0;
+
+  const points = data.map((d, i) => ({
+    ...d,
+    x: padX + i * stepX,
+    y: padY + (1 - (Math.log(d.value || 1) - min) / range) * innerH,
+  }));
+
+  const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+  const areaPath = `${linePath} L ${points[points.length - 1].x.toFixed(1)} ${(padY + innerH).toFixed(1)} L ${points[0].x.toFixed(1)} ${(padY + innerH).toFixed(1)} Z`;
+
+  // Cap the number of x-axis date labels so they don't overlap on longer ranges.
+  const maxTicks = 6;
+  const tickStep = Math.max(1, Math.ceil((data.length - 1) / (maxTicks - 1)));
+  const tickIndices = [];
+  for (let i = 0; i < data.length; i += tickStep) tickIndices.push(i);
+  if (tickIndices[tickIndices.length - 1] !== data.length - 1) tickIndices.push(data.length - 1);
+
+  return (
+    <div className="mb-2">
+      <div className="relative text-accent">
+        <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full h-56">
+          {[0, 0.5, 1].map(frac => {
+            const y = padY + frac * innerH;
+            const val = Math.exp(max - frac * range);
+            return (
+              <g key={frac}>
+                <line x1={padX} y1={y} x2={w - padX} y2={y} stroke="currentColor" className="text-border" strokeWidth="1" strokeDasharray="3,3" />
+                <text x={padX - 6} y={y + 3} textAnchor="end" className="fill-current text-text-muted" fontSize="9">{valueFmt(Math.round(val))}</text>
+              </g>
+            );
+          })}
+          <path d={areaPath} fill="currentColor" opacity="0.08" stroke="none" />
+          <path d={linePath} fill="none" stroke="currentColor" strokeWidth="2" />
+          {points.map((p, i) => (
+            <circle key={i} cx={p.x} cy={p.y} r={hoverIdx === i ? 4.5 : 2.5} fill="currentColor"
+              stroke="white" strokeWidth={hoverIdx === i ? 1.5 : 0}
+              onMouseEnter={() => setHoverIdx(i)} onMouseLeave={() => setHoverIdx(null)}
+              className="cursor-pointer transition-all" />
+          ))}
+        </svg>
+        {hoverIdx != null && (
+          <div className="absolute bg-gray-900 text-white text-[10px] px-2 py-1 rounded pointer-events-none z-10 whitespace-nowrap"
+            style={{ left: `${(points[hoverIdx].x / w) * 100}%`, top: `${(points[hoverIdx].y / h) * 100}%`, transform: 'translate(-50%, -140%)' }}>
+            {points[hoverIdx].date}: {valueFmt(points[hoverIdx].value)}
+          </div>
+        )}
+      </div>
+      <div className="relative h-4 mt-1">
+        {tickIndices.map(i => (
+          <span key={i} className="absolute text-[9px] text-text-muted -translate-x-1/2"
+            style={{ left: `${(points[i].x / w) * 100}%` }}>
+            {points[i].date.slice(5)}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ── Sub-section: Loyalty Points DoD ── */
 function LoyaltyTrend({ daily }) {
   if (!daily.length) return null;
@@ -298,9 +379,12 @@ function LoyaltyTrend({ daily }) {
   const hasLoyalty = sorted.some(r => (pf(r.loyalty_points_redeemed) || 0) > 0);
   if (!hasLoyalty) return null;
 
+  const chartData = sorted.map(row => ({ date: row.date, value: pf(row.loyalty_points_redeemed) || 0 }));
+
   return (
     <div className="bg-card border border-border rounded-lg p-4">
       <h2 className="text-base font-semibold text-text-primary mb-3">Loyalty Points Redeemed (DoD)</h2>
+      <LineChart data={chartData} />
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>

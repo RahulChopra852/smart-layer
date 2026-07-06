@@ -10,18 +10,13 @@ const MIRROR_TABS = [
   'google_ads_daily', 'google_ads_campaigns', 'psi_daily'
 ];
 
-export async function mirrorSheetTab(tabName) {
-  const rows = await readSheetRows(tabName);
-  if (!rows.length) return { tab: tabName, mirrored: 0 };
-  const written = await writeSupabaseRows(tabName, rows);
-  return { tab: tabName, mirrored: written.length };
-}
-
 export async function mirrorAllSheetTabs() {
   const results = [];
   for (const tab of MIRROR_TABS) {
     try {
-      results.push(await mirrorSheetTab(tab));
+      const rows = await readSheetRows(tab);
+      const written = rows.length ? await writeSupabaseRows(tab, rows) : [];
+      results.push({ tab, mirrored: written.length });
     } catch (err) {
       results.push({ tab, error: err.message });
     }
