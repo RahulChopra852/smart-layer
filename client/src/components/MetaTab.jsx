@@ -156,6 +156,11 @@ function generateInsights(campaigns) {
     a2cToCi: x100(r.a2c_to_ci),
     ciToOrder: x100(r.ci_to_order),
     hookRate: x100(r.hook_rate),
+    // Raw funnel-step counts, used as volume floors below so a ratio built from a handful of
+    // events (e.g. 3 orders / 2 checkouts = 150%) can't masquerade as a top performer.
+    lpv: pf(r.lpv) || 0,
+    clicks: pf(r.link_clicks) || 0,
+    checkouts: pf(r.website_checkouts) || 0,
   })).filter(r => r.spend > 50);
 
   const tag = (r) => r.campaign !== r.name ? r.campaign.slice(0, 40) : '';
@@ -163,8 +168,8 @@ function generateInsights(campaigns) {
 
   // Ranks the same metric two ways — worst 20 and best 20 — so an underperformer card always
   // sits next to its "here's what good looks like" counterpart.
-  function rankPair(valueOf, fmtValue, { minSpend = 0, worstBelow = null, bestFilter = null } = {}) {
-    const eligible = c.filter(r => valueOf(r) != null && r.spend > minSpend);
+  function rankPair(valueOf, fmtValue, { minSpend = 0, worstBelow = null, bestFilter = null, minVolume = null } = {}) {
+    const eligible = c.filter(r => valueOf(r) != null && r.spend > minSpend && (!minVolume || minVolume(r)));
     const worstPool = worstBelow != null ? eligible.filter(r => valueOf(r) < worstBelow) : eligible;
     const worst = [...worstPool].sort((a, b) => valueOf(a) - valueOf(b)).slice(0, 20).map(r => toItem(r, fmtValue(valueOf(r))));
     // Zero-valued ties are never a real "best" (a run of no-conversion ads) — drop them, then
@@ -178,10 +183,10 @@ function generateInsights(campaigns) {
 
   return {
     roasPair: rankPair(r => r.roas, v => `${fmt(v)}x`, { minSpend: 300, worstBelow: 1.5, bestFilter: r => r.purchases >= 3 && r.roas >= 2 }),
-    lcToLpvPair: rankPair(r => r.lcToLpv, v => pctD(v), { minSpend: 200, worstBelow: 50 }),
-    lpvToA2cPair: rankPair(r => r.lpvToA2c, v => pctD(v), { minSpend: 200 }),
-    a2cToCiPair: rankPair(r => r.a2cToCi, v => pctD(v), { minSpend: 200 }),
-    ciToOrderPair: rankPair(r => r.ciToOrder, v => pctD(v), { minSpend: 200 }),
+    lcToLpvPair: rankPair(r => r.lcToLpv, v => pctD(v), { minSpend: 200, worstBelow: 50, minVolume: r => r.clicks >= 50 }),
+    lpvToA2cPair: rankPair(r => r.lpvToA2c, v => pctD(v), { minSpend: 200, minVolume: r => r.lpv >= 50 }),
+    a2cToCiPair: rankPair(r => r.a2cToCi, v => pctD(v), { minSpend: 200, minVolume: r => r.checkouts >= 10 }),
+    ciToOrderPair: rankPair(r => r.ciToOrder, v => pctD(v), { minSpend: 200, minVolume: r => r.checkouts >= 20 }),
     hookRatePair: rankPair(r => r.hookRate, v => pctD(v), { minSpend: 500, worstBelow: 20 }),
   };
 }
@@ -602,20 +607,20 @@ export default function MetaTab() {
                 <InsightCard title="Ready to Scale" emoji="🚀" subtitle="Ranked by ROAS — profitable ads (≥2x, ≥3 purchases)" items={insights.roasPair.best} color="text-positive" />
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <InsightCard title="Low LC → LPV (<50%)" emoji="🔗" subtitle="Link clicks that reach the landing page" items={insights.lcToLpvPair.worst} color="text-negative" />
-                <InsightCard title="High LC → LPV" emoji="🔗" subtitle="Link clicks that reach the landing page" items={insights.lcToLpvPair.best} color="text-positive" />
+                <InsightCard title="Low LC → LPV (<50%)" emoji="🔗" subtitle="Link clicks that reach the landing page · ≥50 clicks" items={insights.lcToLpvPair.worst} color="text-negative" />
+                <InsightCard title="High LC → LPV" emoji="🔗" subtitle="Link clicks that reach the landing page · ≥50 clicks" items={insights.lcToLpvPair.best} color="text-positive" />
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <InsightCard title="Low LPV → ATC" emoji="🛒" subtitle="Landing-page views that add to cart" items={insights.lpvToA2cPair.worst} color="text-negative" />
-                <InsightCard title="High LPV → ATC" emoji="🛒" subtitle="Landing-page views that add to cart" items={insights.lpvToA2cPair.best} color="text-positive" />
+                <InsightCard title="Low LPV → ATC" emoji="🛒" subtitle="Landing-page views that add to cart · ≥50 LPVs" items={insights.lpvToA2cPair.worst} color="text-negative" />
+                <InsightCard title="High LPV → ATC" emoji="🛒" subtitle="Landing-page views that add to cart · ≥50 LPVs" items={insights.lpvToA2cPair.best} color="text-positive" />
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <InsightCard title="Low A2C → CI" emoji="💳" subtitle="Add-to-carts that reach checkout" items={insights.a2cToCiPair.worst} color="text-negative" />
-                <InsightCard title="High A2C → CI" emoji="💳" subtitle="Add-to-carts that reach checkout" items={insights.a2cToCiPair.best} color="text-positive" />
+                <InsightCard title="Low A2C → CI" emoji="💳" subtitle="Add-to-carts that reach checkout · ≥10 checkouts" items={insights.a2cToCiPair.worst} color="text-negative" />
+                <InsightCard title="High A2C → CI" emoji="💳" subtitle="Add-to-carts that reach checkout · ≥10 checkouts" items={insights.a2cToCiPair.best} color="text-positive" />
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <InsightCard title="Low CI → Order" emoji="📦" subtitle="Checkouts that complete an order" items={insights.ciToOrderPair.worst} color="text-negative" />
-                <InsightCard title="High CI → Order" emoji="📦" subtitle="Checkouts that complete an order" items={insights.ciToOrderPair.best} color="text-positive" />
+                <InsightCard title="Low CI → Order" emoji="📦" subtitle="Checkouts that complete an order · ≥20 checkouts" items={insights.ciToOrderPair.worst} color="text-negative" />
+                <InsightCard title="High CI → Order" emoji="📦" subtitle="Checkouts that complete an order · ≥20 checkouts" items={insights.ciToOrderPair.best} color="text-positive" />
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <InsightCard title="Low Hook Rate (<20%)" emoji="🎣" subtitle="3-sec video views ÷ impressions" items={insights.hookRatePair.worst} color="text-negative" />
