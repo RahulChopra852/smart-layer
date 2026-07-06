@@ -51,14 +51,11 @@ function KpiCard({ label, value, sub, color }) {
 
 // Every ranked row shares the same subheading — spend, purchases, CTR, CAC — so the only
 // thing that changes between cards is which metric decides the ranking (item.value).
-function InsightCard({ title, emoji, items, color, subtitle }) {
+function InsightCard({ title, emoji, items, color }) {
   if (!items.length) return null;
   return (
     <div className="bg-card border border-border rounded-lg p-4 flex flex-col">
-      <div className="mb-3 shrink-0">
-        <h3 className="text-sm font-semibold text-text-primary">{emoji} {title}</h3>
-        {subtitle && <p className="text-[11px] text-text-muted mt-0.5">{subtitle}</p>}
-      </div>
+      <h3 className="text-sm font-semibold text-text-primary mb-3 shrink-0">{emoji} {title}</h3>
       <div className="flex flex-col gap-2 max-h-[480px] overflow-y-auto">
         {items.map((item, i) => (
           <div key={i} className="bg-bg rounded-md p-3 border border-border/50">
@@ -603,28 +600,28 @@ export default function MetaTab() {
           {insights && (
             <>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <InsightCard title="Underperformers" emoji="🔻" subtitle="Ranked by ROAS (revenue ÷ ad spend) — lowest first" items={insights.roasPair.worst} color="text-negative" />
-                <InsightCard title="Ready to Scale" emoji="🚀" subtitle="Ranked by ROAS — profitable ads (≥2x, ≥3 purchases)" items={insights.roasPair.best} color="text-positive" />
+                <InsightCard title="Underperformers" emoji="🔻" items={insights.roasPair.worst} color="text-negative" />
+                <InsightCard title="Ready to Scale" emoji="🚀" items={insights.roasPair.best} color="text-positive" />
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <InsightCard title="Low LC → LPV (<50%)" emoji="🔗" subtitle="Link clicks that reach the landing page · ≥50 clicks" items={insights.lcToLpvPair.worst} color="text-negative" />
-                <InsightCard title="High LC → LPV" emoji="🔗" subtitle="Link clicks that reach the landing page · ≥50 clicks" items={insights.lcToLpvPair.best} color="text-positive" />
+                <InsightCard title="Low LC → LPV (<50%)" emoji="🔗" items={insights.lcToLpvPair.worst} color="text-negative" />
+                <InsightCard title="High LC → LPV" emoji="🔗" items={insights.lcToLpvPair.best} color="text-positive" />
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <InsightCard title="Low LPV → ATC" emoji="🛒" subtitle="Landing-page views that add to cart · ≥50 LPVs" items={insights.lpvToA2cPair.worst} color="text-negative" />
-                <InsightCard title="High LPV → ATC" emoji="🛒" subtitle="Landing-page views that add to cart · ≥50 LPVs" items={insights.lpvToA2cPair.best} color="text-positive" />
+                <InsightCard title="Low LPV → ATC" emoji="🛒" items={insights.lpvToA2cPair.worst} color="text-negative" />
+                <InsightCard title="High LPV → ATC" emoji="🛒" items={insights.lpvToA2cPair.best} color="text-positive" />
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <InsightCard title="Low A2C → CI" emoji="💳" subtitle="Add-to-carts that reach checkout · ≥10 checkouts" items={insights.a2cToCiPair.worst} color="text-negative" />
-                <InsightCard title="High A2C → CI" emoji="💳" subtitle="Add-to-carts that reach checkout · ≥10 checkouts" items={insights.a2cToCiPair.best} color="text-positive" />
+                <InsightCard title="Low A2C → CI" emoji="💳" items={insights.a2cToCiPair.worst} color="text-negative" />
+                <InsightCard title="High A2C → CI" emoji="💳" items={insights.a2cToCiPair.best} color="text-positive" />
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <InsightCard title="Low CI → Order" emoji="📦" subtitle="Checkouts that complete an order · ≥20 checkouts" items={insights.ciToOrderPair.worst} color="text-negative" />
-                <InsightCard title="High CI → Order" emoji="📦" subtitle="Checkouts that complete an order · ≥20 checkouts" items={insights.ciToOrderPair.best} color="text-positive" />
+                <InsightCard title="Low CI → Order" emoji="📦" items={insights.ciToOrderPair.worst} color="text-negative" />
+                <InsightCard title="High CI → Order" emoji="📦" items={insights.ciToOrderPair.best} color="text-positive" />
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <InsightCard title="Low Hook Rate (<20%)" emoji="🎣" subtitle="3-sec video views ÷ impressions" items={insights.hookRatePair.worst} color="text-negative" />
-                <InsightCard title="High Hook Rate" emoji="🎣" subtitle="3-sec video views ÷ impressions" items={insights.hookRatePair.best} color="text-positive" />
+                <InsightCard title="Low Hook Rate (<20%)" emoji="🎣" items={insights.hookRatePair.worst} color="text-negative" />
+                <InsightCard title="High Hook Rate" emoji="🎣" items={insights.hookRatePair.best} color="text-positive" />
               </div>
             </>
           )}
