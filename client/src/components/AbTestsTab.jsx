@@ -1,55 +1,184 @@
+import { useState } from 'react';
 import { useApi } from '../hooks/useApi';
 
-const FUNNEL_TESTS = [
-  { metric: 'ATC', area: 'Product Page', tests: [
-    { name: 'Sticky ATC Bar on Scroll', hypothesis: 'A persistent add-to-cart bar visible on scroll reduces friction and increases ATC rate by 5-8% by eliminating the need to scroll back up.', impact: 'High', effort: 'Low' },
-    { name: 'Social Proof Near ATC Button', hypothesis: 'Showing "X people bought this today" or star ratings adjacent to the ATC button builds urgency and trust, lifting ATC by 3-5%.', impact: 'Medium', effort: 'Low' },
-    { name: 'Variant Selector Simplification', hypothesis: 'Reducing flavor/size options from dropdown to visual swatches lowers cognitive load, improving ATC by 4-6%.', impact: 'Medium', effort: 'Medium' },
-    { name: 'Price Anchoring with Strikethrough', hypothesis: 'Showing MRP with strikethrough next to offer price creates perceived value, increasing ATC by 3-7%.', impact: 'High', effort: 'Low' },
-    { name: 'Trust Badges Below ATC', hypothesis: 'Adding authenticity guarantee, lab-tested, and free shipping badges below ATC reduces purchase anxiety, lifting ATC 2-4%.', impact: 'Medium', effort: 'Low' },
-    { name: 'Bundle Suggestion on PDP', hypothesis: 'Recommending a complementary product bundle (e.g., whey + shaker) increases perceived value and ATC by 5-8%.', impact: 'High', effort: 'Medium' },
-    { name: 'Image Gallery with Ingredient Shots', hypothesis: 'Adding nutrition label and ingredient close-ups in the gallery reduces info-seeking exits, improving ATC by 2-4%.', impact: 'Low', effort: 'Medium' },
-  ]},
-  { metric: 'IC (Initiate Checkout)', area: 'Cart Page', tests: [
-    { name: 'Cart Drawer vs Full Cart Page', hypothesis: 'A slide-out cart drawer reduces page loads and context switching, improving cart-to-checkout rate by 8-12%.', impact: 'High', effort: 'High' },
-    { name: 'Free Shipping Progress Bar', hypothesis: 'A visual bar showing "Add ₹X more for free shipping" incentivizes upsell and reduces cart abandonment by 5-7%.', impact: 'High', effort: 'Low' },
-    { name: 'Express Checkout (GPay/UPI)', hypothesis: 'Adding one-tap UPI/GPay checkout in cart skips the checkout form, increasing IC by 10-15%.', impact: 'High', effort: 'High' },
-    { name: 'Remove Distractions in Cart', hypothesis: 'Removing navigation and footer from cart page focuses attention on checkout, improving IC by 3-5%.', impact: 'Medium', effort: 'Low' },
-    { name: 'Cart Timer / Urgency Nudge', hypothesis: 'A subtle "Items in cart for 15 min" message creates urgency without being aggressive, lifting IC by 2-4%.', impact: 'Low', effort: 'Low' },
-    { name: 'Saved Cart Reminder Email', hypothesis: 'Sending an abandoned cart email within 1 hour recovers 5-8% of abandoned carts that didn\'t initiate checkout.', impact: 'High', effort: 'Medium' },
-  ]},
-  { metric: 'RPP (Reached Payment)', area: 'Checkout Flow', tests: [
-    { name: 'Guest Checkout Default', hypothesis: 'Defaulting to guest checkout instead of requiring login reduces checkout form drop-off, improving RPP by 8-12%.', impact: 'High', effort: 'Medium' },
-    { name: 'Address Autofill with Pincode', hypothesis: 'Auto-populating city/state from pincode reduces form fields by 2, improving checkout completion by 5-8%.', impact: 'High', effort: 'Medium' },
-    { name: 'Single-Page Checkout', hypothesis: 'Collapsing multi-step checkout into one page reduces perceived effort and improves RPP by 6-10%.', impact: 'High', effort: 'High' },
-    { name: 'COD vs Prepaid Prominence', hypothesis: 'Showing COD option prominently (but incentivizing prepaid with ₹50 off) balances CVR and margin, improving RPP by 3-5%.', impact: 'Medium', effort: 'Low' },
-    { name: 'Order Summary Always Visible', hypothesis: 'A sticky order summary sidebar during checkout reduces uncertainty and back-navigation, improving RPP by 2-4%.', impact: 'Medium', effort: 'Medium' },
-    { name: 'Trust Seals on Payment Page', hypothesis: 'Adding SSL, secure payment, and money-back guarantee badges on payment page reduces payment anxiety, lifting RPP by 3-5%.', impact: 'Medium', effort: 'Low' },
-  ]},
-  { metric: 'CVR (Overall)', area: 'Sitewide', tests: [
-    { name: 'Exit-Intent Popup with Offer', hypothesis: 'Triggering a 10% off popup on exit intent captures 3-5% of bouncing visitors and brings them into the funnel.', impact: 'Medium', effort: 'Low' },
-    { name: 'Personalized Landing Pages by UTM', hypothesis: 'Matching landing page hero/CTA to the ad that drove the click improves relevance and CVR by 15-25% for paid traffic.', impact: 'High', effort: 'High' },
-    { name: 'Mobile Navigation Simplification', hypothesis: 'Reducing mobile menu depth from 3 to 2 levels and adding search prominence reduces bounce and improves CVR by 3-5%.', impact: 'Medium', effort: 'Medium' },
-    { name: 'WhatsApp Chat Widget', hypothesis: 'Adding a WhatsApp chat widget for pre-purchase queries converts hesitant browsers, improving CVR by 2-4%.', impact: 'Medium', effort: 'Low' },
-    { name: 'Collection Page Grid Density', hypothesis: 'Testing 3-column vs 2-column product grid on mobile affects product discovery — 2-col with larger images may lift CVR 3-5%.', impact: 'Medium', effort: 'Low' },
-    { name: 'First-Purchase Coupon Banner', hypothesis: 'A persistent top banner offering ₹200 off first order (min ₹999) improves new visitor CVR by 8-12%.', impact: 'High', effort: 'Low' },
-  ]},
+const CATEGORIES = [
+  { metric: 'ATC', area: 'Product Page' },
+  { metric: 'IC', area: 'Cart Page' },
+  { metric: 'RPP', area: 'Checkout Flow' },
+  { metric: 'CVR', area: 'Sitewide' },
+];
+
+const METRIC_LABELS = { ATC: 'ATC Optimization', IC: 'IC (Initiate Checkout) Optimization', RPP: 'RPP (Reached Payment) Optimization', CVR: 'CVR (Overall) Optimization' };
+
+const STATUS_OPTIONS = [
+  { value: '', label: 'Set status' },
+  { value: 'picked_up', label: 'Picked Up' },
+  { value: 'already_exists', label: 'Already Exists' },
+  { value: 'ab_completed', label: 'AB Completed' },
+];
+
+const STATUS_COLORS = {
+  picked_up: 'text-accent',
+  already_exists: 'text-text-muted',
+  ab_completed: 'text-positive',
+};
+
+// Once a test is triaged into one of these statuses, it moves out of its metric category card
+// and into its own dedicated card below, grouped by status instead — so "picked up" / "already
+// exists" / "AB completed" tests from every metric live together for easy cross-referencing
+// against VWO later.
+const STATUS_CARDS = [
+  { key: 'picked_up', title: 'Picked Up' },
+  { key: 'already_exists', title: 'Already Exists' },
+  { key: 'ab_completed', title: 'AB Completed' },
 ];
 
 function PriorityBadge({ level }) {
   const colors = { High: 'bg-negative/10 text-negative', Medium: 'bg-warning/10 text-warning', Low: 'bg-positive/10 text-positive' };
-  return <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${colors[level] || ''}`}>{level}</span>;
+  return <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${colors[level] || ''}`}>{level || '—'}</span>;
 }
 
-function EffortBadge({ level }) {
-  const colors = { High: 'text-negative', Medium: 'text-warning', Low: 'text-positive' };
-  return <span className={`text-[10px] font-medium ${colors[level] || 'text-text-muted'}`}>{level} effort</span>;
+function StatusSelect({ test, onChange }) {
+  const [saving, setSaving] = useState(false);
+  async function handleChange(e) {
+    const value = e.target.value || null;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/analytics/ab-tests/${test.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: value }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'Failed to update status');
+      onChange(test.id, value);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <select
+      value={test.status || ''}
+      onChange={handleChange}
+      disabled={saving}
+      className={`text-[11px] font-medium bg-bg border border-border rounded-md px-1.5 py-1 focus:outline-none focus:border-accent disabled:opacity-50 ${STATUS_COLORS[test.status] || 'text-text-secondary'}`}
+    >
+      {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  );
+}
+
+function GenerateButton({ metric, area, onGenerated }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function handleClick() {
+    setBusy(true); setError(null);
+    try {
+      const res = await fetch('/api/analytics/ab-tests/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ metric, area }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Generation failed');
+      onGenerated(d.test);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={handleClick}
+        disabled={busy}
+        className="px-2.5 py-1 text-[11px] font-medium rounded-md bg-accent/90 text-white hover:opacity-90 disabled:opacity-50 transition-opacity whitespace-nowrap"
+      >
+        {busy ? 'Analyzing live page…' : 'Generate new'}
+      </button>
+      {error && <span className="text-[10px] text-negative max-w-[220px] truncate" title={error}>{error}</span>}
+    </div>
+  );
+}
+
+function Chevron({ open }) {
+  return (
+    <svg className={`w-4 h-4 text-text-muted transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+    </svg>
+  );
+}
+
+function TestCard({ test, onStatusChange, showMetricTag = false }) {
+  const pending = test.source === 'requested';
+  return (
+    <div className={`bg-bg rounded-md p-3 border ${pending ? 'border-dashed border-warning/50' : 'border-border/50'}`}>
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <div className="flex items-center gap-2 flex-wrap">
+          {showMetricTag && (
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-accent/10 text-accent">{test.metric}</span>
+          )}
+          <h3 className="text-sm font-medium text-text-primary">{test.name}</h3>
+          {pending && <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-warning/15 text-warning">Pending analysis</span>}
+        </div>
+        {!pending && (
+          <div className="flex items-center gap-2 shrink-0">
+            <PriorityBadge level={test.impact} />
+            <StatusSelect test={test} onChange={onStatusChange} />
+          </div>
+        )}
+      </div>
+      <p className={`text-xs leading-relaxed ${pending ? 'text-text-muted italic' : 'text-text-secondary'}`}>{test.hypothesis}</p>
+      {test.page_url && (
+        <a href={test.page_url} target="_blank" rel="noreferrer" className="text-[10px] text-accent hover:underline mt-1 inline-block truncate max-w-full">
+          {test.page_url}
+        </a>
+      )}
+    </div>
+  );
+}
+
+function CollapsibleCard({ title, subtitle, badge, headerExtra, children, defaultOpen = true }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="bg-card border border-border rounded-lg p-4">
+      <div className="flex items-center justify-between gap-3 mb-1">
+        <button onClick={() => setOpen(o => !o)} className="flex items-center gap-2 min-w-0 text-left flex-1">
+          <Chevron open={open} />
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-text-primary">{title}</h2>
+            {subtitle && <p className="text-xs text-text-muted mt-0.5">{subtitle}</p>}
+          </div>
+        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {headerExtra}
+          {badge}
+        </div>
+      </div>
+      {open && <div className="mt-3">{children}</div>}
+    </div>
+  );
 }
 
 export default function AbTestsTab({ start, end }) {
-  const { data } = useApi(`/api/analytics/cro-funnel-deltas?start=${start}&end=${end}`);
+  const { data: funnelData } = useApi(`/api/analytics/cro-funnel-deltas?start=${start}&end=${end}`);
+  const { data: testsData, loading, error, refetch } = useApi('/api/analytics/ab-tests');
+  const [localTests, setLocalTests] = useState(null);
 
-  const webLatest = data?.web?.[data.web.length - 1];
+  const tests = localTests || testsData?.tests || [];
+
+  function handleGenerated(newTest) {
+    setLocalTests([newTest, ...tests]);
+  }
+  function handleStatusChange(id, status) {
+    setLocalTests(tests.map(t => t.id === id ? { ...t, status } : t));
+  }
+
+  const webLatest = funnelData?.web?.[funnelData.web.length - 1];
   const context = webLatest ? {
     atc_pct: webLatest.atc_pct,
     ic_pct: webLatest.ic_pct,
@@ -59,11 +188,8 @@ export default function AbTestsTab({ start, end }) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Context banner */}
       {context && (
-        <div className="bg-card border border-border rounded-lg p-4">
-          <h2 className="text-base font-semibold text-text-primary mb-2">Current Funnel State</h2>
-          <p className="text-xs text-text-muted mb-3">Tests are prioritized based on the biggest conversion drop-offs in your funnel</p>
+        <CollapsibleCard title="Current Funnel State" subtitle="Tests are prioritized based on the biggest conversion drop-offs in your funnel">
           <div className="flex gap-4">
             {[
               { label: 'ATC %', val: context.atc_pct },
@@ -77,38 +203,69 @@ export default function AbTestsTab({ start, end }) {
               </div>
             ))}
           </div>
-        </div>
+        </CollapsibleCard>
       )}
 
-      {/* Test categories */}
-      {FUNNEL_TESTS.map(category => (
-        <div key={category.metric} className="bg-card border border-border rounded-lg p-4">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-base font-semibold text-text-primary">{category.metric} Optimization</h2>
-              <p className="text-xs text-text-muted mt-0.5">Target area: {category.area}</p>
-            </div>
-            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-accent/15 text-accent">
-              {category.tests.length} tests
-            </span>
-          </div>
+      {error && <div className="bg-card border border-border rounded-lg p-4"><p className="text-xs text-negative">{error}</p></div>}
 
-          <div className="flex flex-col gap-3">
-            {category.tests.map((test, i) => (
-              <div key={i} className="bg-bg rounded-md p-3 border border-border/50">
-                <div className="flex items-center justify-between mb-1.5">
-                  <h3 className="text-sm font-medium text-text-primary">{test.name}</h3>
-                  <div className="flex items-center gap-2">
-                    <PriorityBadge level={test.impact} />
-                    <EffortBadge level={test.effort} />
-                  </div>
-                </div>
-                <p className="text-xs text-text-secondary leading-relaxed">{test.hypothesis}</p>
+      {CATEGORIES.map(({ metric, area }) => {
+        const categoryTests = tests.filter(t => t.metric === metric && !t.status);
+        return (
+          <CollapsibleCard
+            key={metric}
+            title={METRIC_LABELS[metric]}
+            subtitle={`Target area: ${area}`}
+            headerExtra={<GenerateButton metric={metric} area={area} onGenerated={handleGenerated} />}
+            badge={
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-accent/15 text-accent">
+                {categoryTests.length} tests
+              </span>
+            }
+          >
+            {loading && !localTests ? (
+              <div className="flex items-center justify-center py-6 text-xs text-text-muted gap-2">
+                <div className="w-3.5 h-3.5 border-2 border-border border-t-accent rounded-full animate-spin" />
+                Loading...
               </div>
-            ))}
-          </div>
-        </div>
-      ))}
+            ) : categoryTests.length === 0 ? (
+              <p className="text-xs text-text-muted text-center py-6">No untriaged tests — click "Generate new" to create one from live page analysis.</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {categoryTests.map((test) => (
+                  <TestCard key={test.id} test={test} onStatusChange={handleStatusChange} />
+                ))}
+              </div>
+            )}
+          </CollapsibleCard>
+        );
+      })}
+
+      {STATUS_CARDS.map(({ key, title }) => {
+        const statusTests = tests.filter(t => t.status === key);
+        return (
+          <CollapsibleCard
+            key={key}
+            title={title}
+            subtitle="Tests moved here after triage, from every metric category"
+            defaultOpen={statusTests.length > 0}
+            badge={
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-accent/15 text-accent">
+                {statusTests.length} tests
+              </span>
+            }
+          >
+            {statusTests.length === 0 ? (
+              <p className="text-xs text-text-muted text-center py-6">No tests marked "{title}" yet.</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {statusTests.map((test) => (
+                  <TestCard key={test.id} test={test} onStatusChange={handleStatusChange} showMetricTag />
+                ))}
+              </div>
+            )}
+          </CollapsibleCard>
+        );
+      })}
     </div>
   );
 }

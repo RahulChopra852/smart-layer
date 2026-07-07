@@ -1,6 +1,6 @@
 import express from 'express';
-import { runFullSync, syncShopifyOrders, syncShopifySessions, syncCroWeb, syncCroApp, syncWebVitals, syncGaApp } from '../services/sync.js';
-import { ensureTabs, readRows, clearTab, setSyncState, appendRows, deleteRowsByDate } from '../db/sheetsDb.js';
+import { runFullSync, syncShopifyOrders, syncShopifySessions, syncCroWeb, syncCroApp, syncWebVitals, syncGaApp, syncSheetMirror } from '../services/sync.js';
+import { ensureTabs, readRows, clearTab, setSyncState, appendRows, deleteRowsByDate } from '../db/supabaseDb.js';
 import { fetchCroWebForDate, fetchCroAppForDate } from '../services/croSheets.js';
 
 const router = express.Router();
@@ -49,7 +49,8 @@ const SOURCE_MAP = {
   cro_web: syncCroWeb,
   cro_app: syncCroApp,
   webvitals: syncWebVitals,
-  ga_app: syncGaApp
+  ga_app: syncGaApp,
+  sheet_mirror: syncSheetMirror
 };
 
 router.post('/:source', async (req, res) => {

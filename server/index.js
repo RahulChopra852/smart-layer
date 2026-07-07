@@ -2,11 +2,11 @@ import express from 'express';
 import 'dotenv/config';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ensureTabs } from './db/sheetsDb.js';
+import { ensureTabs } from './db/supabaseDb.js';
+import { startSyncCron } from './services/scheduler.js';
 
 import syncRoutes from './routes/sync.js';
 import metaRoutes from './routes/meta.js';
-import rcaRoutes from './routes/rca.js';
 import analyticsRoutes from './routes/analytics.js';
 import chatRoutes from './routes/chat.js';
 
@@ -19,7 +19,6 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 app.use('/api/sync', syncRoutes);
 app.use('/api/meta', metaRoutes);
-app.use('/api/rca', rcaRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/chat', chatRoutes);
 
@@ -36,4 +35,5 @@ app.listen(PORT, async () => {
     console.error('Could not verify/create Dashboard DB tabs on startup:', err.message);
     console.error('Check your service-account credentials and sheet sharing — see SPEC.md setup section.');
   }
+  startSyncCron();
 });

@@ -1,6 +1,6 @@
 import express from 'express';
 import Groq from 'groq-sdk';
-import { readRows } from '../db/sheetsDb.js';
+import { readRows } from '../db/supabaseDb.js';
 import { getAppOverview, getWebOverview } from '../services/ga.js';
 import { fetchAnomalies } from '../services/croSheets.js';
 
