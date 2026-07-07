@@ -60,7 +60,7 @@ function InsightCard({ title, emoji, items, color }) {
         {items.map((item, i) => (
           <div key={i} className="bg-bg rounded-md p-3 border border-border/50">
             <div className="flex items-start justify-between gap-2">
-              <div className="text-xs font-medium text-text-primary leading-relaxed" title={item.name}>
+              <div className="text-xs font-medium text-text-primary leading-relaxed">
                 {item.name}
                 {item.tag && <div className="text-[10px] font-normal text-text-muted truncate">{item.tag}</div>}
               </div>
