@@ -123,7 +123,7 @@ function WeeklyFunnel({ start, end, onSynced }) {
       </div>
 
       {channels.map(ch => {
-        const rows = ch.rows.filter(r => r.sessions > 0);
+        const rows = ch.rows.filter(r => (r.sessions > 0) || (r.ic > 0) || (r.rpp > 0) || (r.orders > 0));
         if (rows.length === 0) return null;
 
         const totals = rows.reduce((t, r) => {

@@ -215,6 +215,7 @@ const INVENTORY_QUERY = `
                 title
                 sku
                 inventoryQuantity
+                inventoryPolicy
               }
             }
           }
@@ -246,6 +247,7 @@ export async function fetchLowStockAlerts() {
             variant_title: variant.title,
             sku: variant.sku,
             qty: variant.inventoryQuantity,
+            inventory_policy: variant.inventoryPolicy,
             total_inventory: product.totalInventory,
           });
         }

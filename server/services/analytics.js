@@ -185,12 +185,27 @@ export async function getPagePerformance(startDate, endDate, sourceField = 'utm_
 
 // CRO funnel deltas — DoD and WoW movement in ATC%/IC%/RPP% for web and app.
 export async function getCroFunnelDeltas(startDate, endDate) {
-  const rows = await readRows('cro_daily');
+  const [rows, gaAppRows] = await Promise.all([readRows('cro_daily'), readRows('ga_app_daily')]);
+
+  // GA app sessions by YYYY-MM-DD (sum across iOS+Android)
+  const gaAppSessions = {};
+  for (const r of gaAppRows) {
+    const d = r.date ? `${r.date.slice(0,4)}-${r.date.slice(4,6)}-${r.date.slice(6,8)}` : '';
+    if (d) gaAppSessions[d] = (gaAppSessions[d] || 0) + (parseInt(r.sessions) || 0);
+  }
+
   const allSorted = rows.sort((a, b) => a.date.localeCompare(b.date));
 
   const byChannelAll = { web: [], app: [] };
   for (const r of allSorted) {
     if (byChannelAll[r.channel]) byChannelAll[r.channel].push(r);
+  }
+
+  // Deduplicate: if multiple rows exist for the same date/channel (e.g. after re-syncs), keep the last.
+  for (const ch of ['web', 'app']) {
+    const seen = new Map();
+    for (const r of byChannelAll[ch]) seen.set(r.date, r);
+    byChannelAll[ch] = [...seen.values()];
   }
 
   const pf = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n; };
@@ -213,6 +228,12 @@ export async function getCroFunnelDeltas(startDate, endDate) {
       const c = {};
       for (const k of ['sessions','web_sess','app_sess','atc','ic','rpp','orders','web_orders','app_orders','atc_pct','ic_pct','rpp_pct','cvr_pct','web_cvr','app_cvr','atc_to_ci','ci_to_rpp','rpp_to_ord']) {
         c[k] = pf(curr[k]);
+      }
+      // For app rows, sessions come from GA via ga_app_daily (only if > any funnel step to avoid partial-day nonsense)
+      if (channel === 'app' && (c.sessions == null || c.sessions === 0)) {
+        const gaSess = gaAppSessions[curr.date] || null;
+        const maxFunnel = Math.max(c.ic || 0, c.rpp || 0, c.atc || 0);
+        if (gaSess != null && gaSess > maxFunnel) c.sessions = gaSess;
       }
       // Fix ATC when raw value looks wrong (e.g. 516400 instead of 5164)
       if (c.atc != null && c.sessions != null && c.atc_pct != null && c.atc > c.sessions) {
@@ -274,7 +295,7 @@ export async function getOosWithSessions() {
     readRows('page_sessions'),
   ]);
 
-  // A product is truly OOS (not just low-stock) when its total inventory across all variants is 0.
+  // Track products with at least one fully OOS variant (qty === 0), even if other variants still have stock.
   const byProduct = new Map();
   for (const a of alerts) {
     if (!byProduct.has(a.product_id)) {
@@ -282,7 +303,10 @@ export async function getOosWithSessions() {
     }
     byProduct.get(a.product_id).variants.push(a);
   }
-  const fullyOos = [...byProduct.values()].filter(p => (parseInt(p.total_inventory, 10) || 0) === 0);
+  // Only count variants that are genuinely unavailable: qty=0 AND inventory_policy is DENY (not CONTINUE which allows oversell)
+  const fullyOos = [...byProduct.values()].filter(p =>
+    p.variants.some(v => v.qty === 0 && v.inventory_policy !== 'CONTINUE')
+  );
   const fullyOosIds = new Set(fullyOos.map(p => p.product_id));
 
   const today = todayIso();
@@ -330,6 +354,7 @@ export async function getOosWithSessions() {
       .filter(e => e.date >= oosSince)
       .reduce((s, e) => s + e.sessions, 0);
 
+    const oosVariants = p.variants.filter(v => v.qty === 0);
     return {
       product_id: p.product_id,
       product_title: p.product_title,
@@ -338,6 +363,9 @@ export async function getOosWithSessions() {
       sku: p.variants[0]?.sku || '',
       oos_since: oosSince,
       sessions_during_oos: sessionsDuringOos,
+      oos_variant_count: oosVariants.length,
+      total_variant_count: p.variants.length,
+      total_inventory: parseInt(p.total_inventory, 10) || 0,
     };
   }).sort((a, b) => b.sessions_during_oos - a.sessions_during_oos);
 
