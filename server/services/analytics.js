@@ -147,6 +147,7 @@ export async function getProductInsights(limit = 40, selectedDate = null) {
       return {
         product_id: p.product_id,
         product_title: p.product_title,
+        sku: p.sku || '',
         units_sold: p.units_sold,
         units_dod: yesterday ? p.units_sold - yUnits : null,
         units_dod_pct: yesterday && yUnits > 0 ? ((p.units_sold - yUnits) / yUnits * 100) : null,
@@ -352,8 +353,13 @@ export async function getOosWithSessions() {
   }
 
   // Sessions per landing page, summed across the full page_sessions history (date-indexed).
+  // fetchPageSessionsSince writes two overlapping breakdowns of the same traffic — one grouped
+  // by utm_source, one by referrer_source — as separate rows with different source_field values.
+  // Summing both would double-count real sessions, so only one dimension is used here, matching
+  // getPagePerformance's default.
   const sessionsByPage = new Map();
   for (const r of pageRows) {
+    if (r.source_field !== 'utm_source') continue;
     const sess = parseInt(r.sessions, 10) || 0;
     if (!sessionsByPage.has(r.landing_page)) sessionsByPage.set(r.landing_page, []);
     sessionsByPage.get(r.landing_page).push({ date: r.date, sessions: sess });
@@ -383,4 +389,112 @@ export async function getOosWithSessions() {
   }).sort((a, b) => b.sessions_during_oos - a.sessions_during_oos);
 
   return { alerts, oosWithSessions: result };
+}
+
+function daysBetween(a, b) {
+  const d1 = new Date(a + 'T00:00:00Z');
+  const d2 = new Date(b + 'T00:00:00Z');
+  return Math.max(0, Math.round((d2 - d1) / 86400000));
+}
+
+// Full OOS history — every cycle ever logged (open or closed), each with its own sessions-lost
+// total for that specific window. Unlike getOosWithSessions (which only shows currently-open
+// cycles), a product that has gone OOS and come back multiple times appears as multiple rows,
+// one per cycle — that's already how oos_log is written (a new row opens each time a product
+// newly goes OOS after having been restocked), so no change was needed there, just a read path
+// that doesn't filter down to open-only.
+export async function getOosHistory() {
+  const [log, pageRows] = await Promise.all([
+    readRows('oos_log'),
+    readRows('page_sessions'),
+  ]);
+
+  // See getOosWithSessions above — only one source_field dimension is summed to avoid
+  // double-counting the same sessions across the utm_source/referrer_source breakdowns.
+  const sessionsByPage = new Map();
+  for (const r of pageRows) {
+    if (r.source_field !== 'utm_source') continue;
+    const sess = parseInt(r.sessions, 10) || 0;
+    if (!sessionsByPage.has(r.landing_page)) sessionsByPage.set(r.landing_page, []);
+    sessionsByPage.get(r.landing_page).push({ date: r.date, sessions: sess });
+  }
+
+  const today = todayIso();
+  const result = log.map(r => {
+    const windowEnd = r.restocked_at || null; // null = still open, no upper bound (through today)
+    const landingPage = r.handle ? `/products/${r.handle}` : null;
+    const pageEntries = landingPage ? (sessionsByPage.get(landingPage) || []) : [];
+    const sessionsLost = pageEntries
+      .filter(e => e.date >= r.oos_since && (windowEnd == null || e.date < windowEnd))
+      .reduce((s, e) => s + e.sessions, 0);
+
+    return {
+      product_id: r.product_id,
+      product_title: r.product_title,
+      sku: r.sku || '',
+      oos_since: r.oos_since,
+      restocked_at: r.restocked_at || null,
+      oos_days: daysBetween(r.oos_since, r.restocked_at || today),
+      sessions_lost: sessionsLost,
+      status: r.restocked_at ? 'restocked' : 'oos',
+    };
+  }).sort((a, b) => b.oos_since.localeCompare(a.oos_since));
+
+  return { history: result };
+}
+
+// Low-stock "watch" list — total_inventory under the threshold, with each product's recent
+// (trailing 7-day) session volume for visibility into how much traffic it's still getting.
+const WATCH_QTY_THRESHOLD = 50;
+const RECENT_SESSIONS_DAYS = 7;
+
+export async function getLowStockTrafficWatch() {
+  const [alerts, pageRows] = await Promise.all([
+    fetchLowStockAlerts(),
+    readRows('page_sessions'),
+  ]);
+
+  const byProduct = new Map();
+  for (const a of alerts) {
+    if (!byProduct.has(a.product_id)) {
+      byProduct.set(a.product_id, { product_id: a.product_id, product_title: a.product_title, handle: a.handle, total_inventory: a.total_inventory, variants: [] });
+    }
+    byProduct.get(a.product_id).variants.push(a);
+  }
+
+  const watchlist = [...byProduct.values()].filter(p => (parseInt(p.total_inventory, 10) || 0) < WATCH_QTY_THRESHOLD);
+
+  // See getOosWithSessions above — only one source_field dimension is summed to avoid
+  // double-counting the same sessions across the utm_source/referrer_source breakdowns.
+  const sessionsByPage = new Map();
+  for (const r of pageRows) {
+    if (r.source_field !== 'utm_source') continue;
+    const sess = parseInt(r.sessions, 10) || 0;
+    if (!sessionsByPage.has(r.landing_page)) sessionsByPage.set(r.landing_page, []);
+    sessionsByPage.get(r.landing_page).push({ date: r.date, sessions: sess });
+  }
+
+  const result = watchlist.map(p => {
+    const landingPage = p.handle ? `/products/${p.handle}` : null;
+    const entries = landingPage ? (sessionsByPage.get(landingPage) || []) : [];
+    const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date));
+    const recentEntries = sorted.slice(-RECENT_SESSIONS_DAYS);
+    const recentSessions = recentEntries.reduce((s, e) => s + e.sessions, 0);
+    const latestDay = sorted.length ? sorted[sorted.length - 1].date : null;
+
+    const oosVariantCount = p.variants.filter(v => v.qty === 0 && v.inventory_policy !== 'CONTINUE').length;
+
+    return {
+      product_id: p.product_id,
+      product_title: p.product_title,
+      sku: p.variants[0]?.sku || '',
+      total_inventory: parseInt(p.total_inventory, 10) || 0,
+      oos_variant_count: oosVariantCount,
+      total_variant_count: p.variants.length,
+      latest_day: latestDay,
+      sessions_last_7d: recentSessions,
+    };
+  }).sort((a, b) => a.total_inventory - b.total_inventory);
+
+  return { watchlist: result };
 }

@@ -50,7 +50,7 @@ const ORDERS_QUERY = `
           createdAt
           currentTotalPriceSet { shopMoney { amount } }
           lineItems(first: 50) {
-            edges { node { quantity product { id title } } }
+            edges { node { quantity product { id title } variant { sku } } }
           }
         }
       }
@@ -90,7 +90,7 @@ export async function fetchOrdersSince(sinceDate) {
 
         const key = `${date}|${li.product.id}`;
         if (!productMap.has(key)) {
-          productMap.set(key, { date, product_id: li.product.id, product_title: li.product.title, units_sold: 0 });
+          productMap.set(key, { date, product_id: li.product.id, product_title: li.product.title, units_sold: 0, sku: li.variant?.sku || '' });
         }
         productMap.get(key).units_sold += li.quantity;
       }
@@ -104,7 +104,7 @@ export async function fetchOrdersSince(sinceDate) {
     date, agg.order_count, agg.units_sold, agg.revenue.toFixed(2)
   ]);
   const productRows = [...productMap.values()].map(p => [
-    p.date, p.product_id, p.product_title, p.units_sold, '' // revenue col left blank — see note above
+    p.date, p.product_id, p.product_title, p.units_sold, '', p.sku // revenue col left blank — see note above
   ]);
 
   return { dailyRows, productRows, latestDate: dailyRows.length ? dailyRows[dailyRows.length - 1][0] : null };

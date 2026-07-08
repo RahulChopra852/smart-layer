@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 // named objects for insert/upsert. Kept identical so callers barely had to change.
 export const TAB_SCHEMAS = {
   shopify_daily: ['date', 'order_count', 'units_sold', 'revenue'],
-  shopify_products: ['date', 'product_id', 'product_title', 'units_sold', 'revenue'],
+  shopify_products: ['date', 'product_id', 'product_title', 'units_sold', 'revenue', 'sku'],
   page_sessions: ['date', 'landing_page', 'source_field', 'source_value', 'sessions', 'atc_count', 'atc_rate'],
   cro_daily: ['date', 'channel', 'sessions', 'web_sess', 'app_sess', 'atc', 'ic', 'rpp', 'orders', 'web_orders', 'app_orders', 'atc_pct', 'ic_pct', 'rpp_pct', 'cvr_pct', 'web_cvr', 'app_cvr', 'atc_to_ci', 'ci_to_rpp', 'rpp_to_ord', 'comment'],
   webvitals: ['run_at', 'page_title', 'url', 'lcp', 'fcp', 'inp', 'cls', 'ttfb', 'speed_index', 'performance_score'],
