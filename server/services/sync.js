@@ -74,8 +74,10 @@ async function syncCroWeb() {
   const candidates = extractCommentsAsRcaCandidates(rows);
   await addInferredNotes(candidates);
 
-  const latestDate = rows.length ? rows.map(r => r[0]).sort().slice(-1)[0] : since;
-  if (latestDate) await setSyncState('cro_web', latestDate);
+  // Only stamp last_synced_at when rows actually arrived — this runs every 2 minutes via cron
+  // (see scheduler.js), so falling back to `since` here would re-stamp "now" on every empty
+  // tick and make the "Synced X ago" indicator always read "just now" regardless of real data age.
+  if (rows.length) await setSyncState('cro_web', rows.map(r => r[0]).sort().slice(-1)[0]);
 
   return { source: 'cro_web', rowsAdded: rows.length, since };
 }
@@ -86,8 +88,8 @@ async function syncCroApp() {
   const rows = await fetchCroAppSince(since);
 
   await appendRows('cro_daily', rows);
-  const latestDate = rows.length ? rows.map(r => r[0]).sort().slice(-1)[0] : since;
-  if (latestDate) await setSyncState('cro_app', latestDate);
+  // See syncCroWeb above — only stamp last_synced_at on genuinely new rows.
+  if (rows.length) await setSyncState('cro_app', rows.map(r => r[0]).sort().slice(-1)[0]);
 
   return { source: 'cro_app', rowsAdded: rows.length, since };
 }
@@ -98,8 +100,8 @@ async function syncWebVitals() {
   const rows = await fetchWebVitalsSince(since);
 
   await appendRows('webvitals', rows);
-  const latestRunAt = rows.length ? rows.map(r => r[0]).sort().slice(-1)[0] : since;
-  if (latestRunAt) await setSyncState('webvitals', latestRunAt);
+  // See syncCroWeb's comment — only stamp last_synced_at on genuinely new rows.
+  if (rows.length) await setSyncState('webvitals', rows.map(r => r[0]).sort().slice(-1)[0]);
 
   return { source: 'webvitals', rowsAdded: rows.length, since };
 }
