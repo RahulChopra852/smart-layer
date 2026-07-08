@@ -9,11 +9,12 @@ export const TAB_SCHEMAS = {
   cro_daily: ['date', 'channel', 'sessions', 'web_sess', 'app_sess', 'atc', 'ic', 'rpp', 'orders', 'web_orders', 'app_orders', 'atc_pct', 'ic_pct', 'rpp_pct', 'cvr_pct', 'web_cvr', 'app_cvr', 'atc_to_ci', 'ci_to_rpp', 'rpp_to_ord', 'comment'],
   webvitals: ['run_at', 'page_title', 'url', 'lcp', 'fcp', 'inp', 'cls', 'ttfb', 'speed_index', 'performance_score'],
   meta_reports: [
-    'uploaded_at', 'reporting_start', 'reporting_end', 'campaign_name', 'day', 'ad_name',
+    'uploaded_at', 'reporting_start', 'reporting_end', 'campaign_name', 'day', 'ad_name', 'ad_set_name',
     'amount_spent', 'ctr_all', 'cpm', 'cpc', 'ctr_link', 'cost_per_lpv', 'cost_per_purchase', 'aov',
     'lc_to_lpv', 'lpv_to_a2c', 'a2c_to_ci', 'a2c_to_order', 'ci_to_order',
     'website_checkouts', 'website_purchases', 'roas', 'cvr_pct',
-    'lpv', 'link_clicks', 'hook_rate', 'cost_per_purchase_new_customer'
+    'lpv', 'link_clicks', 'hook_rate', 'cost_per_purchase_new_customer',
+    'ad_set_budget', 'campaign_budget'
   ],
   rca_notes: ['id', 'date', 'source', 'metric_tag', 'note', 'created_at'],
   vwo_campaigns: ['id', 'name', 'status', 'started', 'goal', 'type', 'visitors', 'control_conv', 'control_visitors', 'control_rate', 'control_rpv', 'var_conv', 'var_visitors', 'var_rate', 'var_rpv', 'improvement', 'confidence', 'variations', 'synced_at'],

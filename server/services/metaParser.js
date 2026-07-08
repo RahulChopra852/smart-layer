@@ -42,6 +42,7 @@ export function parseMetaReport(fileBuffer) {
     col(r, 'Campaign name') || TOTAL_MARKER,
     col(r, 'Day'),
     col(r, 'Ad name') || TOTAL_MARKER,
+    col(r, 'Ad set name'),
     toNumOrNull(col(r, 'Amount spent')),
     toNumOrNull(col(r, 'CTR (all)')),
     toNumOrNull(col(r, 'CPM')),
@@ -63,6 +64,12 @@ export function parseMetaReport(fileBuffer) {
     toNumOrNull(col(r, 'Link clicks')),
     toNumOrNull(col(r, 'Hook Rate', 'Hook rate')),
     toNumOrNull(col(r, 'Cost per purchase_new', 'Cost per purchase_new_customer')),
+    // These two columns hold either a rupee budget or a descriptive string ("Using ad set
+    // budget" / "Using campaign budget" / "Using test budget") depending on whether Meta's
+    // CBO/ABO applies at this level — toNumOrNull collapses the non-numeric case to null,
+    // which is exactly "no budget of its own at this level" for the Budget Changes tab.
+    toNumOrNull(col(r, 'Ad set budget')),
+    toNumOrNull(col(r, 'Campaign budget')),
   ];
 
   const accountTotalRow = records[0]['Campaign name'] || col(records[0], 'Campaign name') ? null : toRow(records[0]);

@@ -49,13 +49,44 @@ function KpiCard({ label, value, sub, color }) {
   );
 }
 
+const LEVEL_OPTIONS = [
+  { key: 'campaign', label: 'Campaign', icon: '📢' },
+  { key: 'adset', label: 'Ad Set', icon: '🗂️' },
+  { key: 'ad', label: 'Ad', icon: '🎯' },
+];
+const levelLabelOf = (level) => LEVEL_OPTIONS.find(o => o.key === level)?.label || level;
+
+// Segmented control (single active pill, no per-option border) for switching the Campaign /
+// Ad Set / Ad analysis granularity — visually distinct from the plain bordered-button toggles
+// used elsewhere (day/week range) so the two kinds of choice don't blend together.
+function LevelSwitch({ value, onChange, label = 'Analyzing' }) {
+  return (
+    <div className="flex items-center gap-2">
+      {label && <span className="text-xs font-medium text-text-secondary">{label}:</span>}
+      <div className="inline-flex items-center bg-bg border border-border rounded-lg p-0.5 gap-0.5">
+        {LEVEL_OPTIONS.map(o => (
+          <button key={o.key} onClick={() => onChange(o.key)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              value === o.key ? 'bg-accent text-white shadow-sm' : 'text-text-secondary hover:text-text-primary'
+            }`}>
+            <span>{o.icon}</span>{o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Every ranked row shares the same subheading — spend, purchases, CTR, CAC — so the only
 // thing that changes between cards is which metric decides the ranking (item.value).
-function InsightCard({ title, emoji, items, color }) {
+function InsightCard({ title, emoji, items, color, levelTag }) {
   if (!items.length) return null;
   return (
     <div className="bg-card border border-border rounded-lg p-4 flex flex-col">
-      <h3 className="text-sm font-semibold text-text-primary mb-3 shrink-0">{emoji} {title}</h3>
+      <h3 className="text-sm font-semibold text-text-primary mb-3 shrink-0 flex items-center gap-2">
+        <span>{emoji} {title}</span>
+        {levelTag && <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-accent/15 text-accent">{levelTag}</span>}
+      </h3>
       <div className="flex flex-col gap-2 max-h-[480px] overflow-y-auto">
         {items.map((item, i) => (
           <div key={i} className="bg-bg rounded-md p-3 border border-border/50">
@@ -67,7 +98,10 @@ function InsightCard({ title, emoji, items, color }) {
               <div className={`text-sm font-bold ${color} whitespace-nowrap shrink-0`}>{item.value}</div>
             </div>
             <div className="text-[11px] text-text-muted mt-1">
-              {inr(item.spend)} · {fmt(item.purchases)} purchases · {pctD(item.ctr)} CTR · {inr(item.cac)} CAC
+              <span className="font-semibold text-text-primary">{inr(item.spend)}</span>
+              {' · '}
+              <span className="font-semibold text-text-primary">{fmt(item.purchases)} purchases</span>
+              {' · '}{pctD(item.ctr)} CTR · {inr(item.cac)} CAC
             </div>
           </div>
         ))}
@@ -88,10 +122,48 @@ function wavg(rows, key, weightKey = 'amount_spent') {
   return den > 0 ? num / den : null;
 }
 
-// Rolls a set of daily ad rows up to one row per ad (the "Whole week" view). Sums the counts,
-// recomputes the ratios we have both sides of (ROAS, LC→LPV, CI→Order, CVR) from those sums,
-// and spend-weight-averages the rest. Output uses the same field names as a raw DB row so
-// generateInsights / CampaignTable consume it unchanged.
+// Reduces one group of daily rows (all belonging to the same ad, ad set, or campaign,
+// depending on caller's grouping key) into a single row. Sums the counts, recomputes the
+// ratios we have both sides of (ROAS, LC→LPV, CI→Order, CVR) from those sums, and
+// spend-weight-averages the rest. Output uses the same field names as a raw DB row so
+// generateInsights / CampaignTable / AdRow consume it unchanged.
+function combineRows(group) {
+  const sum = (k) => group.reduce((s, r) => s + (pf(r[k]) || 0), 0);
+  const spend = sum('amount_spent');
+  const purchases = sum('website_purchases');
+  const checkouts = sum('website_checkouts');
+  const lpv = sum('lpv');
+  const clicks = sum('link_clicks');
+  const revenue = group.reduce((s, r) => s + (pf(r.website_purchases) || 0) * (pf(r.aov) || 0), 0);
+  return {
+    campaign_name: group[0].campaign_name,
+    ad_name: group[0].ad_name,
+    ad_set_name: group[0].ad_set_name,
+    day: null,
+    amount_spent: spend,
+    website_purchases: purchases,
+    website_checkouts: checkouts,
+    lpv, link_clicks: clicks,
+    aov: purchases > 0 ? revenue / purchases : null,
+    roas: spend > 0 ? revenue / spend : null,
+    cost_per_purchase: purchases > 0 ? spend / purchases : null,
+    cost_per_lpv: lpv > 0 ? spend / lpv : null,
+    cvr_pct: clicks > 0 ? purchases / clicks : null,
+    lc_to_lpv: clicks > 0 ? lpv / clicks : null,
+    ci_to_order: checkouts > 0 ? purchases / checkouts : null,
+    lpv_to_a2c: wavg(group, 'lpv_to_a2c'),
+    a2c_to_ci: wavg(group, 'a2c_to_ci'),
+    a2c_to_order: wavg(group, 'a2c_to_order'),
+    hook_rate: wavg(group, 'hook_rate'),
+    ctr_all: wavg(group, 'ctr_all'),
+    ctr_link: wavg(group, 'ctr_link'),
+    cpm: wavg(group, 'cpm'),
+    cpc: clicks > 0 ? spend / clicks : wavg(group, 'cpc'),
+    cost_per_purchase_new_customer: wavg(group, 'cost_per_purchase_new_customer'),
+  };
+}
+
+// Rolls a set of daily ad rows up to one row per ad (the "Whole week" view).
 function aggregateAds(rows) {
   const byAd = new Map();
   for (const r of rows) {
@@ -99,49 +171,30 @@ function aggregateAds(rows) {
     if (!byAd.has(key)) byAd.set(key, []);
     byAd.get(key).push(r);
   }
-  const out = [];
-  for (const group of byAd.values()) {
-    const sum = (k) => group.reduce((s, r) => s + (pf(r[k]) || 0), 0);
-    const spend = sum('amount_spent');
-    const purchases = sum('website_purchases');
-    const checkouts = sum('website_checkouts');
-    const lpv = sum('lpv');
-    const clicks = sum('link_clicks');
-    const revenue = group.reduce((s, r) => s + (pf(r.website_purchases) || 0) * (pf(r.aov) || 0), 0);
-    out.push({
-      campaign_name: group[0].campaign_name,
-      ad_name: group[0].ad_name,
-      day: null,
-      amount_spent: spend,
-      website_purchases: purchases,
-      website_checkouts: checkouts,
-      lpv, link_clicks: clicks,
-      aov: purchases > 0 ? revenue / purchases : null,
-      roas: spend > 0 ? revenue / spend : null,
-      cost_per_purchase: purchases > 0 ? spend / purchases : null,
-      cost_per_lpv: lpv > 0 ? spend / lpv : null,
-      cvr_pct: clicks > 0 ? purchases / clicks : null,
-      lc_to_lpv: clicks > 0 ? lpv / clicks : null,
-      ci_to_order: checkouts > 0 ? purchases / checkouts : null,
-      lpv_to_a2c: wavg(group, 'lpv_to_a2c'),
-      a2c_to_ci: wavg(group, 'a2c_to_ci'),
-      a2c_to_order: wavg(group, 'a2c_to_order'),
-      hook_rate: wavg(group, 'hook_rate'),
-      ctr_all: wavg(group, 'ctr_all'),
-      ctr_link: wavg(group, 'ctr_link'),
-      cpm: wavg(group, 'cpm'),
-      cpc: clicks > 0 ? spend / clicks : wavg(group, 'cpc'),
-      cost_per_purchase_new_customer: wavg(group, 'cost_per_purchase_new_customer'),
-    });
-  }
-  return out;
+  return [...byAd.values()].map(combineRows);
 }
 
-function generateInsights(campaigns) {
+// Rolls a set of rows up to one row per campaign or per ad set — same reduction as
+// aggregateAds, grouped by a coarser key. 'ad' delegates to aggregateAds directly.
+function aggregateByLevel(rows, level) {
+  if (level === 'ad') return aggregateAds(rows);
+  const byKey = new Map();
+  for (const r of rows) {
+    const key = level === 'campaign' ? r.campaign_name : `${r.campaign_name}|||${r.ad_set_name || ''}`;
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key).push(r);
+  }
+  return [...byKey.values()].map(combineRows);
+}
+
+function generateInsights(campaigns, level = 'ad') {
   // All funnel ratios are stored as fractions (0.54 = 54%, and some exceed 1.0) → ×100 to show
   // as %. ROAS is already a multiplier and CTR is already a percent-number, so leave those.
+  const nameOf = (r) => level === 'campaign' ? r.campaign_name
+    : level === 'adset' ? (r.ad_set_name || r.campaign_name)
+    : (r.ad_name || r.campaign_name);
   const c = campaigns.map(r => ({
-    name: r.ad_name || r.campaign_name,
+    name: nameOf(r),
     campaign: r.campaign_name,
     spend: pf(r.amount_spent) || 0,
     purchases: pf(r.website_purchases) || 0,
@@ -288,15 +341,19 @@ function DailyAdAnalysis({ dayData, availableDays }) {
   );
 }
 
-function AdRow({ c, isAd }) {
+function AdRow({ c, isAd, nameOverride, tagOverride, showAdSetCol = true, flat = false }) {
   const roas = pf(c.roas);
   const cpp = pf(c.cost_per_purchase);
-  const name = isAd ? (c.ad_name || '(no ad name)') : c.campaign_name;
+  const name = nameOverride ?? (isAd ? (c.ad_name || '(no ad name)') : c.campaign_name);
   return (
-    <tr className={`border-b border-border/50 hover:bg-bg transition-colors ${!isAd ? 'bg-bg/50' : ''}`}>
-      <td className={`py-2.5 px-2 text-xs max-w-[240px] truncate ${isAd ? 'pl-6 text-text-secondary' : 'font-medium text-text-primary'}`} title={name}>
-        {isAd && <span className="text-text-muted mr-1">↳</span>}{name}
+    <tr className={`border-b border-border/50 hover:bg-bg transition-colors ${!isAd && !flat ? 'bg-bg/50' : ''}`}>
+      <td className={`py-2.5 px-2 text-xs max-w-[240px] truncate ${flat ? 'font-medium text-text-primary' : isAd ? 'pl-6 text-text-secondary' : 'font-medium text-text-primary'}`} title={name}>
+        {isAd && !flat && <span className="text-text-muted mr-1">↳</span>}{name}
+        {tagOverride && <div className="text-[10px] font-normal text-text-muted truncate">{tagOverride}</div>}
       </td>
+      {showAdSetCol && (
+        <td className="py-2.5 px-2 text-xs max-w-[160px] truncate text-text-secondary" title={c.ad_set_name || ''}>{c.ad_set_name || '—'}</td>
+      )}
       <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{inr(pf(c.amount_spent))}</td>
       <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{pctD(pf(c.ctr_all))}</td>
       <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{inr(pf(c.cpm))}</td>
@@ -337,6 +394,7 @@ function CampaignTable({ campaigns }) {
 
   const cols = [
     { h: 'Campaign / Ad', align: 'left' },
+    { h: 'Ad Set', align: 'left' },
     { h: 'Spend' }, { h: 'CTR' }, { h: 'CPM' }, { h: 'CPC' }, { h: 'CTR Link' },
     { h: 'Cost/LPV' }, { h: 'CPP' }, { h: 'AOV' },
     { h: 'LC→LPV' }, { h: 'LPV→A2C' }, { h: 'A2C→CI' }, { h: 'A2C→Ord' }, { h: 'CI→Ord' },
@@ -374,8 +432,9 @@ function CampaignTable({ campaigns }) {
                     {g.name}
                     <span className="text-[10px] text-text-muted ml-1">({g.ads.length} ads)</span>
                   </td>
+                  <td />
                   <td className="py-2.5 px-2 text-xs text-right font-medium text-text-primary">{inr(g.totalSpend)}</td>
-                  <td colSpan={19} />
+                  <td colSpan={cols.length - 3} />
                 </tr>
                 {isOpen && sortedAds.map((ad, j) => (
                   <AdRow key={`${g.name}-${j}`} c={ad} isAd={true} />
@@ -385,6 +444,106 @@ function CampaignTable({ campaigns }) {
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// Flat (non-nested) rollup table for the Campaign / Ad Set analysis levels — one row per
+// entity, sorted by spend, reusing AdRow's metric columns without the campaign→ad drilldown.
+function FlatLevelTable({ rows, level }) {
+  const sorted = [...rows].sort((a, b) => (pf(b.amount_spent) || 0) - (pf(a.amount_spent) || 0));
+  const nameHeader = level === 'campaign' ? 'Campaign' : level === 'adset' ? 'Ad Set' : 'Ad';
+
+  const cols = [
+    { h: nameHeader, align: 'left' },
+    { h: 'Spend' }, { h: 'CTR' }, { h: 'CPM' }, { h: 'CPC' }, { h: 'CTR Link' },
+    { h: 'Cost/LPV' }, { h: 'CPP' }, { h: 'AOV' },
+    { h: 'LC→LPV' }, { h: 'LPV→A2C' }, { h: 'A2C→CI' }, { h: 'A2C→Ord' }, { h: 'CI→Ord' },
+    { h: 'Checkouts' }, { h: 'Purchases' }, { h: 'ROAS' }, { h: 'CVR' },
+    { h: 'LPVs' }, { h: 'Clicks' }, { h: 'Hook Rate' },
+  ];
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <thead className="sticky top-0 z-[2] bg-card">
+          <tr className="border-b border-border">
+            {cols.map(c => (
+              <th key={c.h} className={`text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2 whitespace-nowrap ${c.align === 'left' ? 'text-left' : 'text-right'}`}>{c.h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((r, i) => {
+            const name = level === 'campaign' ? r.campaign_name
+              : level === 'adset' ? (r.ad_set_name || '(no ad set name)')
+              : (r.ad_name || '(no ad name)');
+            const tag = level === 'campaign' ? '' : r.campaign_name !== name ? r.campaign_name : '';
+            return <AdRow key={i} c={r} nameOverride={name} tagOverride={tag} showAdSetCol={false} flat />;
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// True if the keyword (case-insensitive substring) appears in the campaign, ad set, or ad
+// name — a match on any one of the three is enough, since the user's "focus product" could be
+// named in the campaign, the ad set, or only the individual ad.
+function matchesKeyword(row, keyword) {
+  const kw = keyword.toLowerCase();
+  return (row.campaign_name || '').toLowerCase().includes(kw)
+    || (row.ad_set_name || '').toLowerCase().includes(kw)
+    || (row.ad_name || '').toLowerCase().includes(kw);
+}
+
+// Keyword search across all uploaded days, rolled up to whichever level the user picks —
+// e.g. typing "plant protein" surfaces every campaign/ad set/ad whose name mentions it,
+// aggregated the same way as the "All Campaigns" table above.
+function FocusProductsCard({ dayData, availableDays }) {
+  const [keyword, setKeyword] = useState('');
+  const [level, setLevel] = useState('ad');
+
+  const results = useMemo(() => {
+    const kw = keyword.trim();
+    if (!kw || !availableDays.length) return [];
+    const rows = availableDays.flatMap(d => dayData[d].campaigns).filter(r => matchesKeyword(r, kw));
+    return aggregateByLevel(rows, level);
+  }, [dayData, availableDays, keyword, level]);
+
+  const totalSpend = results.reduce((s, r) => s + (pf(r.amount_spent) || 0), 0);
+  const levelNoun = level === 'campaign' ? 'campaigns' : level === 'adset' ? 'ad sets' : 'ads';
+
+  return (
+    <div className="bg-card border border-border rounded-lg p-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-text-primary">🎯 Focus Products</h2>
+          <p className="text-xs text-text-muted mt-0.5">Search a keyword to see every matching campaign, ad set, and ad across the whole week</p>
+        </div>
+        <LevelSwitch value={level} onChange={setLevel} />
+      </div>
+
+      <input
+        type="text"
+        value={keyword}
+        onChange={(e) => setKeyword(e.target.value)}
+        placeholder="e.g. plant protein, whey, creatine..."
+        className="w-full mb-4 px-3 py-2 text-sm rounded-md border border-border bg-bg text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-accent/40"
+      />
+
+      {!keyword.trim() ? (
+        <p className="text-xs text-text-muted py-6 text-center">Type a keyword above to search across campaign, ad set, and ad names.</p>
+      ) : results.length === 0 ? (
+        <p className="text-xs text-text-muted py-6 text-center">No campaigns, ad sets, or ads match "{keyword.trim()}".</p>
+      ) : (
+        <>
+          <p className="text-xs text-text-secondary mb-3">
+            <span className="font-semibold text-text-primary">{results.length}</span> matching {levelNoun} · <span className="font-semibold text-text-primary">{inr(totalSpend)}</span> total spend
+          </p>
+          {level === 'ad' ? <CampaignTable campaigns={results} /> : <FlatLevelTable rows={results} level={level} />}
+        </>
+      )}
     </div>
   );
 }
@@ -497,6 +656,244 @@ function NewAdsLaunched({ dayData, availableDays }) {
   );
 }
 
+// Most common value in a list — used instead of an average so that a handful of null/stale
+// rows (or a value repeated on only one of an ad set's several ad rows, which is how Meta's
+// per-ad export actually stamps ad-set-level budgets) can't skew the result.
+function mode(values) {
+  if (!values.length) return null;
+  const counts = new Map();
+  for (const v of values) counts.set(v, (counts.get(v) || 0) + 1);
+  let best = values[0], bestCount = -1;
+  for (const [v, cnt] of counts) if (cnt > bestCount) { best = v; bestCount = cnt; }
+  return best;
+}
+
+// Meta's CSV carries budget at whichever level is actually optimized (CBO vs ABO) — the other
+// column comes through as a descriptive string, which toNumOrNull already turned into null
+// server-side. Resolves one ad set's true budget for one day from all of its ad rows: prefers
+// its own ad_set_budget (ABO) and falls back to the shared campaign_budget (CBO), tagging
+// which source won so campaign-level rollup knows whether to sum or dedupe it (see below).
+function resolveAdSetBudget(rows) {
+  const abo = rows.map(r => pf(r.ad_set_budget)).filter(v => v != null);
+  if (abo.length) return { value: mode(abo), source: 'adset' };
+  const cbo = rows.map(r => pf(r.campaign_budget)).filter(v => v != null);
+  if (cbo.length) return { value: mode(cbo), source: 'campaign' };
+  return null;
+}
+
+// Resolves one true budget number per entity for a single day. Averaging every ad row
+// together (the old approach) is wrong for ABO campaigns — a campaign with 15 ad sets each
+// budgeted differently would have its real total budget diluted into a tiny per-row average.
+// Instead: resolve each ad set's own budget first, then for 'campaign' level sum the distinct
+// ABO ad-set budgets plus the single shared CBO budget (counted once, not once per ad set).
+function resolveDayBudgets(dayData, day, level) {
+  const rows = dayData[day]?.campaigns || [];
+  const out = new Map();
+
+  if (level === 'ad') {
+    const byAd = new Map();
+    for (const r of rows) {
+      const key = `${r.campaign_name}|||${r.ad_name || ''}`;
+      if (!byAd.has(key)) byAd.set(key, []);
+      byAd.get(key).push(r);
+    }
+    for (const [key, group] of byAd) {
+      const vals = group.map(r => pf(r.ad_set_budget) != null ? pf(r.ad_set_budget) : pf(r.campaign_budget)).filter(v => v != null);
+      if (!vals.length) continue;
+      out.set(key, { name: group[0].ad_name || '(no ad name)', tag: group[0].campaign_name, value: mode(vals) });
+    }
+    return out;
+  }
+
+  const byAdSet = new Map();
+  for (const r of rows) {
+    const key = `${r.campaign_name}|||${r.ad_set_name || ''}`;
+    if (!byAdSet.has(key)) byAdSet.set(key, []);
+    byAdSet.get(key).push(r);
+  }
+  const adSetResolved = [];
+  for (const group of byAdSet.values()) {
+    const resolved = resolveAdSetBudget(group);
+    if (!resolved) continue;
+    adSetResolved.push({ campaign_name: group[0].campaign_name, ad_set_name: group[0].ad_set_name, ...resolved });
+  }
+
+  if (level === 'adset') {
+    for (const r of adSetResolved) {
+      out.set(`${r.campaign_name}|||${r.ad_set_name}`, { name: r.ad_set_name || '(no ad set name)', tag: r.campaign_name, value: r.value });
+    }
+    return out;
+  }
+
+  // level === 'campaign'
+  const byCampaign = new Map();
+  for (const r of adSetResolved) {
+    if (!byCampaign.has(r.campaign_name)) byCampaign.set(r.campaign_name, { aboSum: 0, cboValue: null });
+    const c = byCampaign.get(r.campaign_name);
+    if (r.source === 'adset') c.aboSum += r.value;
+    else if (c.cboValue == null) c.cboValue = r.value;
+  }
+  for (const [campaign_name, c] of byCampaign) {
+    out.set(campaign_name, { name: campaign_name, tag: '', value: c.aboSum + (c.cboValue || 0) });
+  }
+  return out;
+}
+
+// Averages the resolved per-day budget per entity across a chosen set of days — the average
+// degenerates to the single value when only one day is picked, and lets a multi-day pick on
+// either side still produce one comparable number per entity.
+function budgetsForDays(dayData, days, level) {
+  const map = new Map();
+  for (const day of days) {
+    for (const [key, { name, tag, value }] of resolveDayBudgets(dayData, day, level)) {
+      if (!map.has(key)) map.set(key, { name, tag, sum: 0, count: 0 });
+      const e = map.get(key);
+      e.sum += value; e.count += 1;
+    }
+  }
+  return map;
+}
+
+// Compares the average budget on `dateSel` days against `compareSel` days, per entity.
+// An entity missing from one side (paused/removed, or newly launched) is treated as budget 0
+// on that side rather than skipped — a paused ad set IS a budget cut, and dropping it silently
+// is exactly how a real cut can go undetected while individual surviving entities look unchanged.
+function detectBudgetChanges(dayData, dateSel, compareSel, level) {
+  const curr = budgetsForDays(dayData, dateSel, level);
+  const prev = budgetsForDays(dayData, compareSel, level);
+  const changes = [];
+  const allKeys = new Set([...curr.keys(), ...prev.keys()]);
+  for (const key of allKeys) {
+    const c = curr.get(key);
+    const p = prev.get(key);
+    const newBudget = c ? c.sum / c.count : 0;
+    const prevBudget = p ? p.sum / p.count : 0;
+    if (newBudget === prevBudget) continue;
+    const delta = newBudget - prevBudget;
+    changes.push({
+      name: (c || p).name, tag: (c || p).tag,
+      prevBudget, newBudget, delta,
+      pct: prevBudget !== 0 ? (delta / prevBudget) * 100 : null,
+      direction: delta > 0 ? 'increase' : 'decrease',
+      vanished: !c, // had a budget on the "Compare to" side, none on "Date" — likely paused/removed
+      appeared: !p, // has a budget on "Date" but had none on "Compare to" — likely newly launched
+    });
+  }
+  changes.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+  return changes;
+}
+
+// Multi-select day-chip row shared by the "Date" and "Compare to" pickers.
+function DayPicker({ label, availableDays, selected, onToggle, activeClass }) {
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="text-xs font-medium text-text-secondary w-24 shrink-0">{label}</span>
+      {availableDays.map(d => (
+        <button key={d} onClick={() => onToggle(d)}
+          className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${selected.includes(d) ? activeClass : 'bg-bg text-text-secondary border-border hover:border-accent/50'}`}>
+          {d}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SpendChangesTab({ dayData, availableDays }) {
+  const [level, setLevel] = useState('campaign');
+  const [dateSel, setDateSel] = useState([]);
+  const [compareSel, setCompareSel] = useState([]);
+
+  // Until the user picks anything, default to "latest day vs the day before" — derived at
+  // render time (not an effect) so there's nothing to seed or resync.
+  const defaultDateSel = useMemo(() => (availableDays.length ? [availableDays[availableDays.length - 1]] : []), [availableDays]);
+  const defaultCompareSel = useMemo(() => (availableDays.length > 1 ? [availableDays[availableDays.length - 2]] : []), [availableDays]);
+  const effectiveDateSel = dateSel.length ? dateSel : defaultDateSel;
+  const effectiveCompareSel = compareSel.length ? compareSel : defaultCompareSel;
+
+  const toggleDate = (d) => setDateSel(prev => {
+    const base = prev.length ? prev : defaultDateSel;
+    return base.includes(d) ? base.filter(x => x !== d) : [...base, d].sort();
+  });
+  const toggleCompare = (d) => setCompareSel(prev => {
+    const base = prev.length ? prev : defaultCompareSel;
+    return base.includes(d) ? base.filter(x => x !== d) : [...base, d].sort();
+  });
+
+  const changes = useMemo(
+    () => (effectiveDateSel.length && effectiveCompareSel.length ? detectBudgetChanges(dayData, effectiveDateSel, effectiveCompareSel, level) : []),
+    [dayData, effectiveDateSel, effectiveCompareSel, level]
+  );
+
+  const increases = changes.filter(c => c.direction === 'increase');
+  const decreases = changes.filter(c => c.direction === 'decrease');
+  const increaseTotal = increases.reduce((s, c) => s + c.delta, 0);
+  const decreaseTotal = decreases.reduce((s, c) => s + c.delta, 0);
+  const levelLabel = levelLabelOf(level);
+
+  return (
+    <div className="bg-card border border-border rounded-lg p-4">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div>
+          <h2 className="text-base font-semibold text-text-primary">Budget Changes</h2>
+          <p className="text-xs text-text-muted mt-0.5">Compare {levelLabel.toLowerCase()} budget between two date selections</p>
+        </div>
+        <LevelSwitch value={level} onChange={setLevel} />
+      </div>
+
+      <div className="flex flex-col gap-2 mb-4 bg-bg rounded-md p-3 border border-border/50">
+        <DayPicker label="Date" availableDays={availableDays} selected={effectiveDateSel} onToggle={toggleDate} activeClass="bg-accent text-white border-accent" />
+        <DayPicker label="Compare to" availableDays={availableDays} selected={effectiveCompareSel} onToggle={toggleCompare} activeClass="bg-accent/40 text-text-primary border-accent/60" />
+      </div>
+
+      {!effectiveDateSel.length || !effectiveCompareSel.length ? (
+        <p className="text-xs text-text-muted py-6 text-center">Select at least one date on each side to compare.</p>
+      ) : changes.length === 0 ? (
+        <p className="text-xs text-text-muted py-6 text-center">No budget changes detected at the {levelLabel.toLowerCase()} level between these dates.</p>
+      ) : (
+        <>
+          <p className="text-xs text-text-secondary mb-3">
+            <span className="font-semibold text-text-primary">{changes.length}</span> budget change{changes.length === 1 ? '' : 's'} detected —{' '}
+            <span className="text-positive font-medium">{increases.length} increase{increases.length === 1 ? '' : 's'} ({inr(increaseTotal)})</span>
+            {' · '}
+            <span className="text-negative font-medium">{decreases.length} decrease{decreases.length === 1 ? '' : 's'} ({inr(Math.abs(decreaseTotal))})</span>
+          </p>
+          <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+            <table className="w-full">
+              <thead className="sticky top-0 z-[2] bg-card">
+                <tr className="border-b border-border">
+                  <th className="text-left text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2">{levelLabel}</th>
+                  <th className="text-right text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2">Previous</th>
+                  <th className="text-right text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2">New</th>
+                  <th className="text-right text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2">Change</th>
+                </tr>
+              </thead>
+              <tbody>
+                {changes.map((c, i) => (
+                  <tr key={i} className={`border-b border-border/50 ${c.direction === 'increase' ? 'bg-positive/5' : 'bg-negative/5'}`}>
+                    <td className="py-2 px-2 text-xs max-w-[280px] truncate text-text-primary font-medium" title={c.name}>
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate">{c.name}</span>
+                        {c.vanished && <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-negative/15 text-negative">Paused</span>}
+                        {c.appeared && <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-positive/15 text-positive">New</span>}
+                      </span>
+                      {c.tag && <div className="text-[10px] font-normal text-text-muted truncate">{c.tag}</div>}
+                    </td>
+                    <td className="py-2 px-2 text-xs text-right text-text-secondary">{c.vanished ? '—' : inr(c.prevBudget)}</td>
+                    <td className="py-2 px-2 text-xs text-right text-text-secondary">{c.appeared ? '—' : inr(c.newBudget)}</td>
+                    <td className={`py-2 px-2 text-xs text-right font-semibold ${c.direction === 'increase' ? 'text-positive' : 'text-negative'}`}>
+                      {c.direction === 'increase' ? '+' : '−'}{inr(Math.abs(c.delta))}{c.pct != null ? ` (${c.direction === 'increase' ? '+' : '−'}${Math.abs(c.pct).toFixed(0)}%)` : ''}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function MetaTab() {
   const [refreshKey, setRefreshKey] = useState(0);
   const { data, loading } = useApi(`/api/analytics/meta-reports?_k=${refreshKey}`);
@@ -521,17 +918,28 @@ export default function MetaTab() {
 
   // 'week' rolls every uploaded day up per ad; otherwise show a specific day's raw rows.
   const [range, setRange] = useState('week');
+  // Analysis level for the insight cards below (Underperformers / Ready to Scale / etc.) —
+  // rolls the same underlying rows up to campaign, ad set, or ad granularity before ranking.
+  const [insightLevel, setInsightLevel] = useState('ad');
 
+  const insightRows = useMemo(() => {
+    if (!availableDays.length) return [];
+    const rows = range === 'week' ? availableDays.flatMap(d => dayData[d].campaigns) : (dayData[range]?.campaigns || []);
+    return aggregateByLevel(rows, insightLevel);
+  }, [range, insightLevel, dayData, availableDays]);
+
+  const insights = useMemo(
+    () => (insightRows.length ? generateInsights(insightRows, insightLevel) : null),
+    [insightRows, insightLevel]
+  );
+
+  // "All Campaigns" table always stays at ad level — expanding a campaign there already
+  // drills down to its ads, so a separate level strip on this table would be redundant.
   const activeCampaigns = useMemo(() => {
     if (!availableDays.length) return [];
     if (range === 'week') return aggregateAds(availableDays.flatMap(d => dayData[d].campaigns));
     return dayData[range]?.campaigns || [];
   }, [range, dayData, availableDays]);
-
-  const insights = useMemo(
-    () => (activeCampaigns.length ? generateInsights(activeCampaigns) : null),
-    [activeCampaigns]
-  );
 
   const rangeLabel = range === 'week' ? 'Whole week' : range;
 
@@ -583,45 +991,48 @@ export default function MetaTab() {
       {/* Performance insights — pick a day or the whole week, then compare worst vs best per metric */}
       {availableDays.length > 0 && (
         <div className="flex flex-col gap-4">
-          <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-medium text-text-secondary mr-1">View:</span>
-            <button onClick={() => setRange('week')}
-              className={`px-3 py-1 text-xs rounded-md border transition-colors ${range === 'week' ? 'bg-accent text-white border-accent' : 'bg-bg text-text-secondary border-border hover:border-accent/50'}`}>
-              Whole week
-            </button>
-            {availableDays.map(d => (
-              <button key={d} onClick={() => setRange(d)}
-                className={`px-3 py-1 text-xs rounded-md border transition-colors ${range === d ? 'bg-accent text-white border-accent' : 'bg-bg text-text-secondary border-border hover:border-accent/50'}`}>
-                {d}
+          <div className="bg-card border border-border rounded-lg p-3 flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-medium text-text-secondary mr-1">View:</span>
+              <button onClick={() => setRange('week')}
+                className={`px-3 py-1 text-xs rounded-md border transition-colors ${range === 'week' ? 'bg-accent text-white border-accent' : 'bg-bg text-text-secondary border-border hover:border-accent/50'}`}>
+                Whole week
               </button>
-            ))}
+              {availableDays.map(d => (
+                <button key={d} onClick={() => setRange(d)}
+                  className={`px-3 py-1 text-xs rounded-md border transition-colors ${range === d ? 'bg-accent text-white border-accent' : 'bg-bg text-text-secondary border-border hover:border-accent/50'}`}>
+                  {d}
+                </button>
+              ))}
+            </div>
+            <LevelSwitch value={insightLevel} onChange={setInsightLevel} />
           </div>
 
           {insights && (
             <>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <InsightCard title="Underperformers" emoji="🔻" items={insights.roasPair.worst} color="text-negative" />
-                <InsightCard title="Ready to Scale" emoji="🚀" items={insights.roasPair.best} color="text-positive" />
+                <InsightCard title="Underperformers" emoji="🔻" items={insights.roasPair.worst} color="text-negative" levelTag={levelLabelOf(insightLevel)} />
+                <InsightCard title="Ready to Scale" emoji="🚀" items={insights.roasPair.best} color="text-positive" levelTag={levelLabelOf(insightLevel)} />
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <InsightCard title="Low LC → LPV (<50%)" emoji="🔗" items={insights.lcToLpvPair.worst} color="text-negative" />
-                <InsightCard title="High LC → LPV" emoji="🔗" items={insights.lcToLpvPair.best} color="text-positive" />
+                <InsightCard title="Low LC → LPV (<50%)" emoji="🔗" items={insights.lcToLpvPair.worst} color="text-negative" levelTag={levelLabelOf(insightLevel)} />
+                <InsightCard title="High LC → LPV" emoji="🔗" items={insights.lcToLpvPair.best} color="text-positive" levelTag={levelLabelOf(insightLevel)} />
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <InsightCard title="Low LPV → ATC" emoji="🛒" items={insights.lpvToA2cPair.worst} color="text-negative" />
-                <InsightCard title="High LPV → ATC" emoji="🛒" items={insights.lpvToA2cPair.best} color="text-positive" />
+                <InsightCard title="Low LPV → ATC" emoji="🛒" items={insights.lpvToA2cPair.worst} color="text-negative" levelTag={levelLabelOf(insightLevel)} />
+                <InsightCard title="High LPV → ATC" emoji="🛒" items={insights.lpvToA2cPair.best} color="text-positive" levelTag={levelLabelOf(insightLevel)} />
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <InsightCard title="Low A2C → CI" emoji="💳" items={insights.a2cToCiPair.worst} color="text-negative" />
-                <InsightCard title="High A2C → CI" emoji="💳" items={insights.a2cToCiPair.best} color="text-positive" />
+                <InsightCard title="Low A2C → CI" emoji="💳" items={insights.a2cToCiPair.worst} color="text-negative" levelTag={levelLabelOf(insightLevel)} />
+                <InsightCard title="High A2C → CI" emoji="💳" items={insights.a2cToCiPair.best} color="text-positive" levelTag={levelLabelOf(insightLevel)} />
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <InsightCard title="Low CI → Order" emoji="📦" items={insights.ciToOrderPair.worst} color="text-negative" />
-                <InsightCard title="High CI → Order" emoji="📦" items={insights.ciToOrderPair.best} color="text-positive" />
+                <InsightCard title="Low CI → Order" emoji="📦" items={insights.ciToOrderPair.worst} color="text-negative" levelTag={levelLabelOf(insightLevel)} />
+                <InsightCard title="High CI → Order" emoji="📦" items={insights.ciToOrderPair.best} color="text-positive" levelTag={levelLabelOf(insightLevel)} />
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <InsightCard title="Low Hook Rate (<20%)" emoji="🎣" items={insights.hookRatePair.worst} color="text-negative" />
-                <InsightCard title="High Hook Rate" emoji="🎣" items={insights.hookRatePair.best} color="text-positive" />
+                <InsightCard title="Low Hook Rate (<20%)" emoji="🎣" items={insights.hookRatePair.worst} color="text-negative" levelTag={levelLabelOf(insightLevel)} />
+                <InsightCard title="High Hook Rate" emoji="🎣" items={insights.hookRatePair.best} color="text-positive" levelTag={levelLabelOf(insightLevel)} />
               </div>
             </>
           )}
@@ -633,7 +1044,18 @@ export default function MetaTab() {
         <NewAdsLaunched dayData={dayData} availableDays={availableDays} />
       )}
 
-      {/* Campaign table — follows the same day/week selector as the insights above */}
+      {/* Focus Products — keyword search across campaigns/ad sets/ads, with its own level strip */}
+      {availableDays.length > 0 && (
+        <FocusProductsCard dayData={dayData} availableDays={availableDays} />
+      )}
+
+      {/* Budget Changes — independent Campaign/Ad Set/Ad level strip inside the component */}
+      {availableDays.length > 0 && (
+        <SpendChangesTab dayData={dayData} availableDays={availableDays} />
+      )}
+
+      {/* Campaign table — follows the same day/week selector as the insights above. Expanding
+          a campaign here already drills down to its ads, so no separate level strip. */}
       {activeCampaigns.length > 0 && (
         <div className="bg-card border border-border rounded-lg p-4">
           <div className="flex items-center justify-between mb-4">
