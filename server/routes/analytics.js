@@ -1,6 +1,7 @@
 import express from 'express';
 import {
-  getCommerceSnapshot, getPagePerformance, getCroFunnelDeltas, getWebVitalsFlags, getProductInsights, getOosWithSessions
+  getCommerceSnapshot, getPagePerformance, getCroFunnelDeltas, getWebVitalsFlags, getProductInsights, getOosWithSessions,
+  getOosHistory, getLowStockTrafficWatch
 } from '../services/analytics.js';
 import { readRows, updateRowByKey } from '../db/supabaseDb.js';
 import { generateAbTest } from '../services/abTests.js';
@@ -63,6 +64,17 @@ router.get('/products', async (req, res) => {
   const { limit, date } = req.query;
   try {
     res.json(await getProductInsights(limit ? parseInt(limit, 10) : 40, date || null));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/analytics/products-raw — full unaggregated shopify_products rows across every
+// synced date. getProductInsights only returns one date's top-N snapshot with DoD/WoW deltas;
+// the Focus Product search+trend chart needs the whole history to filter and plot client-side.
+router.get('/products-raw', async (req, res) => {
+  try {
+    res.json({ rows: await readRows('shopify_products') });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -490,6 +502,22 @@ router.get('/low-stock', async (req, res) => {
 router.get('/oos-sessions', async (req, res) => {
   try {
     res.json(await getOosWithSessions());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/oos-history', async (req, res) => {
+  try {
+    res.json(await getOosHistory());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/low-stock-watch', async (req, res) => {
+  try {
+    res.json(await getLowStockTrafficWatch());
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
