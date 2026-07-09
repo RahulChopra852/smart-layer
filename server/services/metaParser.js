@@ -40,6 +40,7 @@ export function parseMetaReport(fileBuffer) {
     col(r, 'Reporting starts'),
     col(r, 'Reporting ends'),
     col(r, 'Campaign name') || TOTAL_MARKER,
+    col(r, 'Ad set name'),
     col(r, 'Day'),
     col(r, 'Ad name') || TOTAL_MARKER,
     toNumOrNull(col(r, 'Amount spent')),

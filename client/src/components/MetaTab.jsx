@@ -11,6 +11,11 @@ function fmt(n) { if (n == null || isNaN(n)) return '—'; return n.toLocaleStri
 function inr(n) { if (n == null || isNaN(n)) return '—'; return `₹${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`; }
 function pctD(n) { if (n == null || isNaN(n)) return '—'; return `${n.toFixed(2)}%`; }
 
+const LEVELS = [
+  { key: 'campaign', label: 'Campaign', nameField: 'campaign_name', fallback: '(no campaign)', unitLabel: 'campaigns' },
+  { key: 'adset', label: 'Ad Set', nameField: 'ad_set_name', fallback: '(no ad set)', unitLabel: 'ad sets' },
+  { key: 'ad', label: 'Ad', nameField: 'ad_name', fallback: '(no ad name)', unitLabel: 'ads' },
+];
 
 function UploadForm({ onUploaded }) {
   const [uploading, setUploading] = useState(false);
@@ -76,8 +81,8 @@ function InsightCard({ title, emoji, items, color }) {
   );
 }
 
-// Spend-weighted average of a per-day ratio — used for week-level rollups of metrics we can't
-// recompute from counts (Meta gives us only the ratio, not its numerator/denominator).
+// Spend-weighted average of a per-day ratio — used for rollups of metrics we can't recompute
+// from counts (Meta gives us only the ratio, not its numerator/denominator).
 function wavg(rows, key, weightKey = 'amount_spent') {
   let num = 0, den = 0;
   for (const r of rows) {
@@ -88,19 +93,20 @@ function wavg(rows, key, weightKey = 'amount_spent') {
   return den > 0 ? num / den : null;
 }
 
-// Rolls a set of daily ad rows up to one row per ad (the "Whole week" view). Sums the counts,
+// Rolls a set of rows up to one row per group, per a caller-supplied key. Sums the counts,
 // recomputes the ratios we have both sides of (ROAS, LC→LPV, CI→Order, CVR) from those sums,
-// and spend-weight-averages the rest. Output uses the same field names as a raw DB row so
-// generateInsights / CampaignTable consume it unchanged.
-function aggregateAds(rows) {
-  const byAd = new Map();
+// and spend-weight-averages the rest. Output uses the same field names as a raw DB row, plus
+// childCount (how many source rows rolled in), so callers up the chain (ad→ad set→campaign)
+// can keep aggregating unchanged.
+function aggregateBy(rows, keyFn) {
+  const byKey = new Map();
   for (const r of rows) {
-    const key = `${r.campaign_name}|||${r.ad_name || ''}`;
-    if (!byAd.has(key)) byAd.set(key, []);
-    byAd.get(key).push(r);
+    const key = keyFn(r);
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key).push(r);
   }
   const out = [];
-  for (const group of byAd.values()) {
+  for (const group of byKey.values()) {
     const sum = (k) => group.reduce((s, r) => s + (pf(r[k]) || 0), 0);
     const spend = sum('amount_spent');
     const purchases = sum('website_purchases');
@@ -110,6 +116,7 @@ function aggregateAds(rows) {
     const revenue = group.reduce((s, r) => s + (pf(r.website_purchases) || 0) * (pf(r.aov) || 0), 0);
     out.push({
       campaign_name: group[0].campaign_name,
+      ad_set_name: group[0].ad_set_name,
       ad_name: group[0].ad_name,
       day: null,
       amount_spent: spend,
@@ -132,16 +139,21 @@ function aggregateAds(rows) {
       cpm: wavg(group, 'cpm'),
       cpc: clicks > 0 ? spend / clicks : wavg(group, 'cpc'),
       cost_per_purchase_new_customer: wavg(group, 'cost_per_purchase_new_customer'),
+      childCount: group.length,
     });
   }
   return out;
 }
 
-function generateInsights(campaigns) {
+// Ad-level rollup for the "whole week" view — one row per ad, keyed by campaign + ad set + ad
+// name (ad set is part of the key since Meta can reuse the same ad name across ad sets).
+const aggregateAds = (rows) => aggregateBy(rows, r => `${r.campaign_name}|||${r.ad_set_name || ''}|||${r.ad_name || ''}`);
+
+function generateInsights(rows, nameField) {
   // All funnel ratios are stored as fractions (0.54 = 54%, and some exceed 1.0) → ×100 to show
   // as %. ROAS is already a multiplier and CTR is already a percent-number, so leave those.
-  const c = campaigns.map(r => ({
-    name: r.ad_name || r.campaign_name,
+  const c = rows.map(r => ({
+    name: r[nameField] || r.campaign_name,
     campaign: r.campaign_name,
     spend: pf(r.amount_spent) || 0,
     purchases: pf(r.website_purchases) || 0,
@@ -165,10 +177,11 @@ function generateInsights(campaigns) {
 
   // Ranks the same metric two ways — worst 20 and best 20 — so an underperformer card always
   // sits next to its "here's what good looks like" counterpart.
-  function rankPair(valueOf, fmtValue, { minSpend = 0, worstBelow = null, bestFilter = null, minVolume = null } = {}) {
-    const eligible = c.filter(r => valueOf(r) != null && r.spend > minSpend && (!minVolume || minVolume(r)));
+  function rankPair(valueOf, fmtValue, { minSpend = 0, worstBelow = null, bestFilter = null, minVolume = null, worstSortBySpend = false } = {}) {
+    const eligible = c.filter(r => valueOf(r) != null && r.spend >= minSpend && (!minVolume || minVolume(r)));
     const worstPool = worstBelow != null ? eligible.filter(r => valueOf(r) < worstBelow) : eligible;
-    const worst = [...worstPool].sort((a, b) => valueOf(a) - valueOf(b)).slice(0, 20).map(r => toItem(r, fmtValue(valueOf(r))));
+    const worstSort = worstSortBySpend ? (a, b) => b.spend - a.spend : (a, b) => valueOf(a) - valueOf(b);
+    const worst = [...worstPool].sort(worstSort).slice(0, 20).map(r => toItem(r, fmtValue(valueOf(r))));
     // Zero-valued ties are never a real "best" (a run of no-conversion ads) — drop them, then
     // apply any card-specific floor (e.g. ROAS "scale" candidates need real purchase volume so
     // a fluke 1-purchase 8x ad doesn't masquerade as a scale-up winner).
@@ -179,214 +192,13 @@ function generateInsights(campaigns) {
   }
 
   return {
-    roasPair: rankPair(r => r.roas, v => `${fmt(v)}x`, { minSpend: 300, worstBelow: 1.5, bestFilter: r => r.purchases >= 3 && r.roas >= 2 }),
+    roasPair: rankPair(r => r.roas, v => `${fmt(v)}x`, { minSpend: 500, worstBelow: 1.5, worstSortBySpend: true, bestFilter: r => r.purchases >= 3 && r.roas >= 2 }),
     lcToLpvPair: rankPair(r => r.lcToLpv, v => pctD(v), { minSpend: 200, worstBelow: 50, minVolume: r => r.clicks >= 50 }),
     lpvToA2cPair: rankPair(r => r.lpvToA2c, v => pctD(v), { minSpend: 200, minVolume: r => r.lpv >= 50 }),
     a2cToCiPair: rankPair(r => r.a2cToCi, v => pctD(v), { minSpend: 200, minVolume: r => r.checkouts >= 10 }),
     ciToOrderPair: rankPair(r => r.ciToOrder, v => pctD(v), { minSpend: 200, minVolume: r => r.checkouts >= 20 }),
     hookRatePair: rankPair(r => r.hookRate, v => pctD(v), { minSpend: 500, worstBelow: 20 }),
   };
-}
-
-function DailyAdAnalysis({ dayData, availableDays }) {
-  const allAds = new Map();
-  for (const day of availableDays) {
-    for (const c of dayData[day]?.campaigns || []) {
-      const adName = c.ad_name || c.campaign_name;
-      const key = `${c.campaign_name}|||${adName}`;
-      if (!allAds.has(key)) allAds.set(key, { name: adName, campaign: c.campaign_name, days: {} });
-      allAds.get(key).days[day] = c;
-    }
-  }
-
-  const ads = [...allAds.values()].map(ad => {
-    const totalSpend = availableDays.reduce((s, d) => s + (pf(ad.days[d]?.amount_spent) || 0), 0);
-    const totalPurchases = availableDays.reduce((s, d) => s + (pf(ad.days[d]?.website_purchases) || 0), 0);
-    const totalRevenue = availableDays.reduce((s, d) => {
-      const dc = ad.days[d];
-      return s + ((pf(dc?.website_purchases) || 0) * (pf(dc?.aov) || 0));
-    }, 0);
-    const totalRoas = totalSpend > 0 ? totalRevenue / totalSpend : null;
-    const totalCpp = totalPurchases > 0 ? totalSpend / totalPurchases : null;
-    return { ...ad, totalSpend, totalPurchases, totalRoas, totalCpp };
-  }).sort((a, b) => b.totalSpend - a.totalSpend);
-
-  const [metric, setMetric] = useState('amount_spent');
-  const metricOpts = [
-    { key: 'amount_spent', label: 'Spend', f: inr },
-    { key: 'website_purchases', label: 'Purchases', f: fmt },
-    { key: 'roas', label: 'ROAS', f: v => `${fmt(v)}x` },
-    { key: 'cost_per_purchase', label: 'CPP', f: inr },
-    { key: 'ctr_all', label: 'CTR', f: pctD },
-    { key: 'hook_rate', label: 'Hook Rate', f: pctD },
-  ];
-  const activeMeta = metricOpts.find(m => m.key === metric);
-
-  return (
-    <div className="bg-card border border-border rounded-lg p-4">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="text-base font-semibold text-text-primary">Ad Analysis — Daily Breakdown</h2>
-          <p className="text-xs text-text-muted mt-0.5">Per-ad performance across {availableDays.length} days with totals</p>
-        </div>
-        <div className="flex gap-1.5 flex-wrap">
-          {metricOpts.map(m => (
-            <button key={m.key} onClick={() => setMetric(m.key)}
-              className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
-                metric === m.key ? 'bg-accent text-white border-accent' : 'bg-bg text-text-secondary border-border hover:border-accent/50'
-              }`}>
-              {m.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="sticky top-0 z-[2] bg-card">
-            <tr className="border-b border-border">
-              <th className="text-left text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2 sticky left-0 bg-card z-10 min-w-[200px]">Ad / Campaign</th>
-              {availableDays.map(d => (
-                <th key={d} className="text-right text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2 whitespace-nowrap">{d.slice(5)}</th>
-              ))}
-              <th className="text-right text-[10px] font-semibold text-accent uppercase tracking-wider py-2 px-2 whitespace-nowrap border-l border-border">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ads.map(ad => {
-              const totalVal = metric === 'amount_spent' ? ad.totalSpend
-                : metric === 'website_purchases' ? ad.totalPurchases
-                : metric === 'roas' ? ad.totalRoas
-                : metric === 'cost_per_purchase' ? ad.totalCpp
-                : null;
-
-              return (
-                <tr key={ad.name} className="border-b border-border/50 hover:bg-bg transition-colors">
-                  <td className="py-2.5 px-2 text-xs text-text-primary max-w-[240px] truncate sticky left-0 bg-card z-10" title={`${ad.name}\n${ad.campaign}`}>
-                    <div className="truncate font-medium">{ad.name}</div>
-                    {ad.campaign !== ad.name && <div className="truncate text-[10px] text-text-muted">{ad.campaign}</div>}
-                  </td>
-                  {availableDays.map(d => {
-                    const dc = ad.days[d];
-                    const val = dc ? pf(dc[metric]) : null;
-                    return (
-                      <td key={d} className={`py-2.5 px-2 text-xs text-right ${val == null ? 'text-text-muted' : 'text-text-secondary'}`}>
-                        {val != null ? activeMeta.f(val) : '—'}
-                      </td>
-                    );
-                  })}
-                  <td className="py-2.5 px-2 text-xs text-right font-semibold text-text-primary border-l border-border">
-                    {totalVal != null ? activeMeta.f(totalVal) : '—'}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function AdRow({ c, isAd }) {
-  const roas = pf(c.roas);
-  const cpp = pf(c.cost_per_purchase);
-  const name = isAd ? (c.ad_name || '(no ad name)') : c.campaign_name;
-  return (
-    <tr className={`border-b border-border/50 hover:bg-bg transition-colors ${!isAd ? 'bg-bg/50' : ''}`}>
-      <td className={`py-2.5 px-2 text-xs max-w-[240px] truncate ${isAd ? 'pl-6 text-text-secondary' : 'font-medium text-text-primary'}`} title={name}>
-        {isAd && <span className="text-text-muted mr-1">↳</span>}{name}
-      </td>
-      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{inr(pf(c.amount_spent))}</td>
-      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{pctD(pf(c.ctr_all))}</td>
-      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{inr(pf(c.cpm))}</td>
-      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{inr(pf(c.cpc))}</td>
-      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{pctD(pf(c.ctr_link))}</td>
-      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{inr(pf(c.cost_per_lpv))}</td>
-      <td className={`py-2.5 px-2 text-xs text-right font-medium ${cpp > 1000 ? 'text-negative' : 'text-text-secondary'}`}>{inr(cpp)}</td>
-      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{inr(pf(c.aov))}</td>
-      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{pctD(x100(c.lc_to_lpv))}</td>
-      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{pctD(x100(c.lpv_to_a2c))}</td>
-      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{pctD(x100(c.a2c_to_ci))}</td>
-      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{pctD(x100(c.a2c_to_order))}</td>
-      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{pctD(x100(c.ci_to_order))}</td>
-      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{fmt(pf(c.website_checkouts))}</td>
-      <td className="py-2.5 px-2 text-xs text-right font-medium text-text-primary">{fmt(pf(c.website_purchases))}</td>
-      <td className={`py-2.5 px-2 text-xs text-right font-semibold ${roas >= 3 ? 'text-positive' : roas != null && roas < 1.5 ? 'text-negative' : 'text-text-secondary'}`}>{fmt(roas)}x</td>
-      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{pctD(x100(c.cvr_pct))}</td>
-      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{fmt(pf(c.lpv))}</td>
-      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{fmt(pf(c.link_clicks))}</td>
-      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{pctD(x100(c.hook_rate))}</td>
-    </tr>
-  );
-}
-
-function CampaignTable({ campaigns }) {
-  // Group ads by campaign
-  const byCampaign = {};
-  for (const c of campaigns) {
-    const key = c.campaign_name;
-    if (!byCampaign[key]) byCampaign[key] = { name: key, ads: [], totalSpend: 0 };
-    byCampaign[key].ads.push(c);
-    byCampaign[key].totalSpend += pf(c.amount_spent) || 0;
-  }
-  const groups = Object.values(byCampaign).sort((a, b) => b.totalSpend - a.totalSpend);
-
-  const [expanded, setExpanded] = useState({});
-  const toggle = (name) => setExpanded(prev => ({ ...prev, [name]: !prev[name] }));
-
-  const cols = [
-    { h: 'Campaign / Ad', align: 'left' },
-    { h: 'Spend' }, { h: 'CTR' }, { h: 'CPM' }, { h: 'CPC' }, { h: 'CTR Link' },
-    { h: 'Cost/LPV' }, { h: 'CPP' }, { h: 'AOV' },
-    { h: 'LC→LPV' }, { h: 'LPV→A2C' }, { h: 'A2C→CI' }, { h: 'A2C→Ord' }, { h: 'CI→Ord' },
-    { h: 'Checkouts' }, { h: 'Purchases' }, { h: 'ROAS' }, { h: 'CVR' },
-    { h: 'LPVs' }, { h: 'Clicks' }, { h: 'Hook Rate' },
-  ];
-
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full">
-        <thead className="sticky top-0 z-[2] bg-card">
-          <tr className="border-b border-border">
-            {cols.map(c => (
-              <th key={c.h} className={`text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2 whitespace-nowrap ${c.align === 'left' ? 'text-left' : 'text-right'}`}>{c.h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {groups.map((g) => {
-            const hasAds = g.ads.some(a => a.ad_name);
-            const isOpen = expanded[g.name];
-            const sortedAds = [...g.ads].sort((a, b) => (pf(b.amount_spent) || 0) - (pf(a.amount_spent) || 0));
-            // Campaign summary row (use first ad's data if only one, otherwise show campaign name)
-            const summaryRow = g.ads.length === 1 && !hasAds ? g.ads[0] : null;
-
-            if (summaryRow) {
-              return <AdRow key={g.name} c={summaryRow} isAd={false} />;
-            }
-
-            return (
-              <Fragment key={g.name}>
-                <tr className="border-b border-border/50 bg-bg/50 cursor-pointer hover:bg-bg" onClick={() => toggle(g.name)}>
-                  <td className="py-2.5 px-2 text-xs font-medium text-text-primary max-w-[240px] truncate" title={g.name}>
-                    <span className="text-text-muted mr-1">{isOpen ? '▼' : '▶'}</span>
-                    {g.name}
-                    <span className="text-[10px] text-text-muted ml-1">({g.ads.length} ads)</span>
-                  </td>
-                  <td className="py-2.5 px-2 text-xs text-right font-medium text-text-primary">{inr(g.totalSpend)}</td>
-                  <td colSpan={19} />
-                </tr>
-                {isOpen && sortedAds.map((ad, j) => (
-                  <AdRow key={`${g.name}-${j}`} c={ad} isAd={true} />
-                ))}
-              </Fragment>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
 }
 
 function NewAdsLaunched({ dayData, availableDays }) {
@@ -397,7 +209,7 @@ function NewAdsLaunched({ dayData, availableDays }) {
   for (const day of availableDays) {
     for (const c of dayData[day]?.campaigns || []) {
       const adName = c.ad_name || c.campaign_name;
-      const key = `${c.campaign_name}|||${adName}`;
+      const key = `${c.campaign_name}|||${c.ad_set_name || ''}|||${adName}`;
       if (!adFirstSeen.has(key)) {
         adFirstSeen.set(key, {
           ad: adName, campaign: c.campaign_name, launchDay: day,
@@ -497,6 +309,132 @@ function NewAdsLaunched({ dayData, availableDays }) {
   );
 }
 
+const TABLE_COLS = [
+  { h: 'Name', align: 'left' },
+  { h: 'Spend' }, { h: 'CTR' }, { h: 'CPM' }, { h: 'CPC' }, { h: 'CTR Link' },
+  { h: 'Cost/LPV' }, { h: 'CPP' }, { h: 'AOV' },
+  { h: 'LC→LPV' }, { h: 'LPV→A2C' }, { h: 'A2C→CI' }, { h: 'A2C→Ord' }, { h: 'CI→Ord' },
+  { h: 'Checkouts' }, { h: 'Purchases' }, { h: 'ROAS' }, { h: 'CVR' },
+  { h: 'LPVs' }, { h: 'Clicks' }, { h: 'Hook Rate' },
+];
+
+function TableHead() {
+  return (
+    <thead className="sticky top-0 z-[2] bg-card">
+      <tr className="border-b border-border">
+        {TABLE_COLS.map(c => (
+          <th key={c.h} className={`text-[10px] font-medium text-text-muted uppercase tracking-wider py-2 px-2 whitespace-nowrap ${c.align === 'left' ? 'text-left' : 'text-right'}`}>{c.h}</th>
+        ))}
+      </tr>
+    </thead>
+  );
+}
+
+// One data row at any level (campaign / ad set / ad) — `label` is whatever name the caller
+// resolved for this level, `indent` marks it as a drill-down child inside a grouped table.
+function EntityRow({ label, indent, c }) {
+  const roas = pf(c.roas);
+  const cpp = pf(c.cost_per_purchase);
+  return (
+    <tr className="border-b border-border/50 hover:bg-bg transition-colors">
+      <td className={`py-2.5 px-2 text-xs max-w-[240px] truncate ${indent ? 'pl-6 text-text-secondary' : 'font-medium text-text-primary'}`} title={label}>
+        {indent && <span className="text-text-muted mr-1">↳</span>}{label}
+      </td>
+      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{inr(pf(c.amount_spent))}</td>
+      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{pctD(pf(c.ctr_all))}</td>
+      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{inr(pf(c.cpm))}</td>
+      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{inr(pf(c.cpc))}</td>
+      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{pctD(pf(c.ctr_link))}</td>
+      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{inr(pf(c.cost_per_lpv))}</td>
+      <td className={`py-2.5 px-2 text-xs text-right font-medium ${cpp > 1000 ? 'text-negative' : 'text-text-secondary'}`}>{inr(cpp)}</td>
+      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{inr(pf(c.aov))}</td>
+      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{pctD(x100(c.lc_to_lpv))}</td>
+      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{pctD(x100(c.lpv_to_a2c))}</td>
+      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{pctD(x100(c.a2c_to_ci))}</td>
+      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{pctD(x100(c.a2c_to_order))}</td>
+      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{pctD(x100(c.ci_to_order))}</td>
+      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{fmt(pf(c.website_checkouts))}</td>
+      <td className="py-2.5 px-2 text-xs text-right font-medium text-text-primary">{fmt(pf(c.website_purchases))}</td>
+      <td className={`py-2.5 px-2 text-xs text-right font-semibold ${roas >= 3 ? 'text-positive' : roas != null && roas < 1.5 ? 'text-negative' : 'text-text-secondary'}`}>{fmt(roas)}x</td>
+      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{pctD(x100(c.cvr_pct))}</td>
+      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{fmt(pf(c.lpv))}</td>
+      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{fmt(pf(c.link_clicks))}</td>
+      <td className="py-2.5 px-2 text-xs text-right text-text-secondary">{pctD(x100(c.hook_rate))}</td>
+    </tr>
+  );
+}
+
+// Campaign tab — one flat row per campaign, sorted by spend. No drill-down since campaign is
+// already the top of the hierarchy.
+function FlatTable({ rows, nameField, fallbackLabel }) {
+  const sorted = [...rows].sort((a, b) => (pf(b.amount_spent) || 0) - (pf(a.amount_spent) || 0));
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <TableHead />
+        <tbody>
+          {sorted.map((r, i) => (
+            <EntityRow key={i} label={r[nameField] || fallbackLabel} indent={false} c={r} />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Ad Set / Ad tabs — groups the given rows by campaign, expandable to reveal the child rows
+// (ad sets or ads) inside each campaign.
+function GroupedTable({ rows, nameField, fallbackLabel, unitLabel }) {
+  const byCampaign = {};
+  for (const r of rows) {
+    const key = r.campaign_name;
+    if (!byCampaign[key]) byCampaign[key] = { name: key, children: [], totalSpend: 0 };
+    byCampaign[key].children.push(r);
+    byCampaign[key].totalSpend += pf(r.amount_spent) || 0;
+  }
+  const groups = Object.values(byCampaign).sort((a, b) => b.totalSpend - a.totalSpend);
+
+  const [expanded, setExpanded] = useState({});
+  const toggle = (name) => setExpanded(prev => ({ ...prev, [name]: !prev[name] }));
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <TableHead />
+        <tbody>
+          {groups.map(g => {
+            const isOpen = expanded[g.name];
+            const sortedChildren = [...g.children].sort((a, b) => (pf(b.amount_spent) || 0) - (pf(a.amount_spent) || 0));
+
+            // A campaign with exactly one child at this level has nothing to drill into —
+            // just show it as a single row.
+            if (g.children.length === 1) {
+              return <EntityRow key={g.name} label={sortedChildren[0][nameField] || fallbackLabel} indent={false} c={sortedChildren[0]} />;
+            }
+
+            return (
+              <Fragment key={g.name}>
+                <tr className="border-b border-border/50 bg-bg/50 cursor-pointer hover:bg-bg" onClick={() => toggle(g.name)}>
+                  <td className="py-2.5 px-2 text-xs font-medium text-text-primary max-w-[240px] truncate" title={g.name}>
+                    <span className="text-text-muted mr-1">{isOpen ? '▼' : '▶'}</span>
+                    {g.name}
+                    <span className="text-[10px] text-text-muted ml-1">({g.children.length} {unitLabel})</span>
+                  </td>
+                  <td className="py-2.5 px-2 text-xs text-right font-medium text-text-primary">{inr(g.totalSpend)}</td>
+                  <td colSpan={19} />
+                </tr>
+                {isOpen && sortedChildren.map((c, j) => (
+                  <EntityRow key={`${g.name}-${j}`} label={c[nameField] || fallbackLabel} indent c={c} />
+                ))}
+              </Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function MetaTab() {
   const [refreshKey, setRefreshKey] = useState(0);
   const { data, loading } = useApi(`/api/analytics/meta-reports?_k=${refreshKey}`);
@@ -521,16 +459,27 @@ export default function MetaTab() {
 
   // 'week' rolls every uploaded day up per ad; otherwise show a specific day's raw rows.
   const [range, setRange] = useState('week');
+  // Which level of the hierarchy the insights/table below are showing.
+  const [level, setLevel] = useState('ad');
 
-  const activeCampaigns = useMemo(() => {
+  const activeAdRows = useMemo(() => {
     if (!availableDays.length) return [];
     if (range === 'week') return aggregateAds(availableDays.flatMap(d => dayData[d].campaigns));
     return dayData[range]?.campaigns || [];
   }, [range, dayData, availableDays]);
 
+  // Ad set / campaign rollups are always derived from the ad-level rows for the current
+  // day/week selection, so all three tabs stay in sync with the same view.
+  const adSetRows = useMemo(() => aggregateBy(activeAdRows, r => `${r.campaign_name}|||${r.ad_set_name || ''}`), [activeAdRows]);
+  const campaignRows = useMemo(() => aggregateBy(activeAdRows, r => r.campaign_name), [activeAdRows]);
+
+  const levelRows = { campaign: campaignRows, adset: adSetRows, ad: activeAdRows };
+  const activeLevel = LEVELS.find(l => l.key === level);
+  const activeRows = levelRows[level];
+
   const insights = useMemo(
-    () => (activeCampaigns.length ? generateInsights(activeCampaigns) : null),
-    [activeCampaigns]
+    () => (activeRows.length ? generateInsights(activeRows, activeLevel.nameField) : null),
+    [activeRows, activeLevel]
   );
 
   const rangeLabel = range === 'week' ? 'Whole week' : range;
@@ -580,9 +529,22 @@ export default function MetaTab() {
         )}
       </div>
 
-      {/* Performance insights — pick a day or the whole week, then compare worst vs best per metric */}
       {availableDays.length > 0 && (
         <div className="flex flex-col gap-4">
+          {/* Level switcher — Campaign / Ad Set / Ad analysis */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-sm font-bold text-text-primary uppercase tracking-wide">Analyze by</span>
+            <div className="flex items-center gap-1 bg-bg rounded-lg p-1">
+              {LEVELS.map(l => (
+                <button key={l.key} onClick={() => setLevel(l.key)}
+                  className={`px-4 py-1.5 text-sm font-bold rounded-md transition-colors ${level === l.key ? 'bg-accent text-white shadow-sm' : 'text-text-secondary hover:text-text-primary'}`}>
+                  {l.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Day / week selector */}
           <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-2 flex-wrap">
             <span className="text-xs font-medium text-text-secondary mr-1">View:</span>
             <button onClick={() => setRange('week')}
@@ -628,24 +590,26 @@ export default function MetaTab() {
         </div>
       )}
 
-      {/* New Ads Launched — by date */}
-      {availableDays.length >= 1 && (
+      {/* New Ads Launched — ad-level only, campaign/ad set launch dates aren't a meaningful concept */}
+      {level === 'ad' && availableDays.length >= 1 && (
         <NewAdsLaunched dayData={dayData} availableDays={availableDays} />
       )}
 
-      {/* Campaign table — follows the same day/week selector as the insights above */}
-      {activeCampaigns.length > 0 && (
+      {/* Entity table — follows the same level + day/week selectors as the insights above */}
+      {activeRows.length > 0 && (
         <div className="bg-card border border-border rounded-lg p-4">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-base font-semibold text-text-primary">All Campaigns — {rangeLabel}</h2>
+              <h2 className="text-base font-semibold text-text-primary">All {activeLevel.label}s — {rangeLabel}</h2>
               <p className="text-xs text-text-muted mt-0.5">Sorted by spend</p>
             </div>
             <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-accent/15 text-accent">
-              {activeCampaigns.length} ads
+              {activeRows.length} {activeLevel.unitLabel}
             </span>
           </div>
-          <CampaignTable campaigns={activeCampaigns} />
+          {level === 'campaign'
+            ? <FlatTable rows={activeRows} nameField={activeLevel.nameField} fallbackLabel={activeLevel.fallback} />
+            : <GroupedTable rows={activeRows} nameField={activeLevel.nameField} fallbackLabel={activeLevel.fallback} unitLabel={activeLevel.unitLabel} />}
         </div>
       )}
     </div>
