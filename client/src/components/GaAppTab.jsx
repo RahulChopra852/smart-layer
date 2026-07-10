@@ -276,6 +276,64 @@ function PeriodTotals({ months, byMonth }) {
   );
 }
 
+function ProductPagesCard({ start, end }) {
+  const [rangeStart, setRangeStart] = useState(start);
+  const [rangeEnd, setRangeEnd] = useState(end);
+  const { data, loading, error } = useApi(`/api/analytics/ga-app-products?start=${rangeStart}&end=${rangeEnd}`);
+
+  return (
+    <div className="bg-card border border-border rounded-lg p-4">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <h2 className="text-base font-semibold text-text-primary">Product Pages</h2>
+        <div className="flex items-center gap-2">
+          <input type="date" value={rangeStart} max={rangeEnd}
+            onChange={e => setRangeStart(e.target.value)}
+            className="bg-bg border border-border text-text-primary text-xs px-2.5 py-1.5 rounded-md focus:outline-none focus:border-accent" />
+          <span className="text-xs text-text-muted">to</span>
+          <input type="date" value={rangeEnd} min={rangeStart}
+            onChange={e => setRangeEnd(e.target.value)}
+            className="bg-bg border border-border text-text-primary text-xs px-2.5 py-1.5 rounded-md focus:outline-none focus:border-accent" />
+        </div>
+      </div>
+
+      {loading && <div className="text-xs text-text-muted py-4 text-center">Loading...</div>}
+      {error && <p className="text-xs text-negative">{error}</p>}
+
+      {data && (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+            <KpiCard label="Page Views" value={fmt(data.screenPageViews)} />
+            <KpiCard label="Sessions" value={fmt(data.sessions)} />
+            <KpiCard label="Checkout Initiated (from Cart)" value={fmt(data.checkoutInitiated)} />
+          </div>
+          <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+            <table className="w-full">
+              <thead className="sticky top-0 z-[2] bg-card">
+                <tr className="border-b border-border">
+                  <th className="text-left text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Product</th>
+                  <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Sessions</th>
+                  <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Add to Cart</th>
+                  <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">ATC Rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(data.products || []).map((p, i) => (
+                  <tr key={i} className="border-b border-border/50 hover:bg-bg">
+                    <td className="py-2 px-3 text-xs text-text-secondary max-w-[280px] truncate" title={p.itemName}>{p.itemName}</td>
+                    <td className="py-2 px-3 text-xs text-right text-text-primary font-medium">{fmt(p.sessions)}</td>
+                    <td className="py-2 px-3 text-xs text-right text-text-secondary">{fmt(p.itemsAddedToCart)}</td>
+                    <td className="py-2 px-3 text-xs text-right text-text-muted">{p.sessions > 0 ? `${(p.itemsAddedToCart / p.sessions * 100).toFixed(1)}%` : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function GaSyncBar({ onSynced }) {
   const [syncing, setSyncing] = useState(false);
   const [result, setResult] = useState(null);
@@ -375,6 +433,9 @@ export default function GaAppTab({ start, end }) {
           <KpiCard label="iOS Downloads" value={fmt(currMonthData?.ios?.newUsers)} prev={currMonthComplete ? prevMonthData?.ios?.newUsers : null} />
         </div>
       </div>
+
+      {/* Product Pages — sessions/ATC per product, own date range */}
+      <ProductPagesCard start={start} end={end} />
 
       {/* Installs Tracker with month picker */}
       {months.length > 0 && <InstallsTracker byMonth={byMonth} months={months} />}

@@ -82,6 +82,43 @@ export async function getAppOverview(startDate, endDate) {
   };
 }
 
+// Item-scoped dimensions (itemName) aren't compatible with session-scoped metrics like
+// screenPageViews in the same request as unifiedScreenName, but ARE compatible with `sessions`
+// directly — GA4 exposes a "sessions during which this item was viewed" rollup per item.
+// begin_checkout is the app's only checkout-entry event (cart is the sole path to it in this
+// app), so it's what "checkout initiated from cart" maps to on the App side.
+export async function getProductPageInsights(startDate, endDate) {
+  const [summary, products, checkoutRows] = await Promise.all([
+    runReport(GA_APP_PROPERTY, {
+      startDate, endDate,
+      metrics: ['sessions', 'screenPageViews'],
+      dimensions: []
+    }),
+    runReport(GA_APP_PROPERTY, {
+      startDate, endDate,
+      metrics: ['sessions', 'itemsAddedToCart'],
+      dimensions: ['itemName']
+    }),
+    runReport(GA_APP_PROPERTY, {
+      startDate, endDate,
+      metrics: ['eventCount'],
+      dimensions: ['eventName'],
+      dimensionFilter: {
+        filter: { fieldName: 'eventName', stringFilter: { matchType: 'EXACT', value: 'begin_checkout' } }
+      }
+    }),
+  ]);
+
+  return {
+    sessions: summary[0]?.sessions ?? 0,
+    screenPageViews: summary[0]?.screenPageViews ?? 0,
+    checkoutInitiated: checkoutRows[0]?.eventCount ?? 0,
+    products: products
+      .filter(r => r.itemName && r.itemName !== '(not set)')
+      .sort((a, b) => b.sessions - a.sessions),
+  };
+}
+
 // GA4's `conversions` metric sums whatever events are marked "Key events" in the property's
 // Admin settings — on this property that includes plain browsing events (view_item, session_start,
 // view_item_list), so it inflates to ~3x sessions and doesn't mean "conversion" in the normal

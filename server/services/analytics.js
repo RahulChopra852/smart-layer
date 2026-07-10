@@ -197,6 +197,110 @@ export async function getPagePerformance(startDate, endDate, sourceField = 'utm_
     .sort((a, b) => b.sessions - a.sessions);
 }
 
+function shiftDate(dateStr, days) {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function pctChange(curr, prev) {
+  if (prev == null || prev === 0 || curr == null) return null;
+  return (curr - prev) / prev * 100;
+}
+
+// Main Movers — compares a trailing window (7/15/30d) against the equal-length window right
+// before it: current = [end-N+1, end], prior = [end-2N+1, end-N]. Two layers:
+//  - headline funnel metrics from cro_daily (web+app combined) — this table has a full year of
+//    history, so all three window sizes work.
+//  - per-landing-page session movers from page_sessions — that table only goes back to whenever
+//    sessions sync started (see CLAUDE.md), so wider windows may come back with few/no pages that
+//    have a valid prior-window comparison; that's real data-availability, not a bug.
+export async function getMainMovers(windowDays, endDate) {
+  const currStart = shiftDate(endDate, -(windowDays - 1));
+  const currEnd = endDate;
+  const priorStart = shiftDate(endDate, -(windowDays * 2 - 1));
+  const priorEnd = shiftDate(endDate, -windowDays);
+
+  const [croRows, pageRows] = await Promise.all([readRows('cro_daily'), readRows('page_sessions')]);
+
+  function sumCro(startDate, endDate) {
+    const inRange = croRows.filter(r => r.date >= startDate && r.date <= endDate);
+    const t = { sessions: 0, atc: 0, ic: 0, rpp: 0, orders: 0 };
+    for (const r of inRange) {
+      t.sessions += parseFloat(r.sessions) || 0;
+      t.atc += parseFloat(r.atc) || 0;
+      t.ic += parseFloat(r.ic) || 0;
+      t.rpp += parseFloat(r.rpp) || 0;
+      t.orders += parseFloat(r.orders) || 0;
+    }
+    return t;
+  }
+
+  const currTotals = sumCro(currStart, currEnd);
+  const priorTotals = sumCro(priorStart, priorEnd);
+
+  const metrics = ['sessions', 'atc', 'ic', 'rpp', 'orders'].map(key => ({
+    metric: key,
+    curr: currTotals[key],
+    prior: priorTotals[key],
+    change: pctChange(currTotals[key], priorTotals[key]),
+  }));
+  metrics.push({
+    metric: 'cvr_pct',
+    curr: currTotals.sessions > 0 ? currTotals.orders / currTotals.sessions * 100 : null,
+    prior: priorTotals.sessions > 0 ? priorTotals.orders / priorTotals.sessions * 100 : null,
+    change: null,
+  });
+  const cvrRow = metrics[metrics.length - 1];
+  cvrRow.change = pctChange(cvrRow.curr, cvrRow.prior);
+
+  function sumPagesByLandingPage(startDate, endDate) {
+    const inRange = pageRows.filter(r => r.date >= startDate && r.date <= endDate && r.source_field === 'utm_source');
+    const byPage = new Map();
+    for (const r of inRange) {
+      const key = r.landing_page;
+      if (!byPage.has(key)) byPage.set(key, { landing_page: key, sessions: 0, atc_count: 0 });
+      const p = byPage.get(key);
+      p.sessions += parseInt(r.sessions, 10) || 0;
+      p.atc_count += parseInt(r.atc_count, 10) || 0;
+    }
+    return byPage;
+  }
+
+  const pageDataFrom = pageRows.length ? [...new Set(pageRows.map(r => r.date))].sort()[0] : null;
+  // A prior window that starts before page-level sync history began would only be partially
+  // covered (e.g. 2 of 15 days), making its total artificially low and the % change misleading —
+  // skip page movers entirely rather than compute off an incomplete prior period.
+  const priorWindowFullyCovered = pageDataFrom != null && priorStart >= pageDataFrom;
+
+  const pageMovers = [];
+  if (priorWindowFullyCovered) {
+    const currPages = sumPagesByLandingPage(currStart, currEnd);
+    const priorPages = sumPagesByLandingPage(priorStart, priorEnd);
+    for (const [page, curr] of currPages) {
+      const prior = priorPages.get(page);
+      if (!prior || prior.sessions < 20 || curr.sessions < 20) continue; // too little volume for a fair % move
+      pageMovers.push({
+        landing_page: page,
+        currSessions: curr.sessions,
+        priorSessions: prior.sessions,
+        change: pctChange(curr.sessions, prior.sessions),
+      });
+    }
+    pageMovers.sort((a, b) => b.change - a.change);
+  }
+
+  return {
+    windowDays,
+    currRange: { start: currStart, end: currEnd },
+    priorRange: { start: priorStart, end: priorEnd },
+    metrics,
+    gainers: pageMovers.filter(p => p.change > 0).slice(0, 10),
+    decliners: pageMovers.filter(p => p.change < 0).sort((a, b) => a.change - b.change).slice(0, 10),
+    pageDataFrom,
+  };
+}
+
 // CRO funnel deltas — DoD and WoW movement in ATC%/IC%/RPP% for web and app.
 export async function getCroFunnelDeltas(startDate, endDate) {
   const [rows, gaAppRows] = await Promise.all([readRows('cro_daily'), readRows('ga_app_daily')]);

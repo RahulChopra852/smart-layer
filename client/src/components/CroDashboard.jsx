@@ -4,6 +4,7 @@ import PagePerformance from './PagePerformance';
 import DayTrend from './DayTrend';
 import RcaSnapshot, { useRcaProblems } from './RcaSnapshot';
 import CommerceSnapshot from './CommerceSnapshot';
+import MainMovers from './MainMovers';
 import { useApi } from '../hooks/useApi';
 
 function fmt(n) { return n != null ? n.toLocaleString() : '—'; }
@@ -354,6 +355,7 @@ export default function CroDashboard({ start, end }) {
       <DayTrend key={`daytrend-${refreshKey}`} />
       <CroFunnel start={start} end={end} key={`funnel-${refreshKey}`} />
       <WeeklyFunnel start={start} end={end} key={`weekly-${refreshKey}`} onSynced={() => setRefreshKey(k => k + 1)} />
+      <MainMovers end={end} key={`movers-${refreshKey}`} />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" key={`pages-${refreshKey}`}>
         <PagePerformance start={start} end={end} mode="top" />
         <PagePerformance start={start} end={end} mode="worst" />

@@ -1,12 +1,12 @@
 import express from 'express';
 import {
   getCommerceSnapshot, getPagePerformance, getCroFunnelDeltas, getWebVitalsFlags, getProductInsights, getOosWithSessions,
-  getOosHistory, getLowStockTrafficWatch
+  getOosHistory, getLowStockTrafficWatch, getMainMovers
 } from '../services/analytics.js';
 import { readRows, updateRowByKey } from '../db/supabaseDb.js';
 import { generateAbTest } from '../services/abTests.js';
 import { fetchAnomalies, fetchDailyVisitors } from '../services/croSheets.js';
-import { getAppOverview, getWebOverview } from '../services/ga.js';
+import { getAppOverview, getWebOverview, getProductPageInsights } from '../services/ga.js';
 import { fetchLowStockAlerts, fetchHourlyOrders } from '../services/shopify.js';
 
 const router = express.Router();
@@ -24,6 +24,17 @@ router.get('/page-performance', async (req, res) => {
   if (!start || !end) return res.status(400).json({ error: 'start and end query params required' });
   try {
     res.json({ pages: await getPagePerformance(start, end, sourceField || 'utm_source') });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/main-movers', async (req, res) => {
+  const { window, end } = req.query;
+  const windowDays = parseInt(window, 10) || 7;
+  const endDate = end || new Date().toISOString().slice(0, 10);
+  try {
+    res.json(await getMainMovers(windowDays, endDate));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -93,6 +104,13 @@ router.get('/ga-app', async (req, res) => {
   const { start, end } = req.query;
   if (!start || !end) return res.status(400).json({ error: 'start and end required' });
   try { res.json(await getAppOverview(start, end)); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/ga-app-products', async (req, res) => {
+  const { start, end } = req.query;
+  if (!start || !end) return res.status(400).json({ error: 'start and end required' });
+  try { res.json(await getProductPageInsights(start, end)); }
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
