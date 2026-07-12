@@ -52,6 +52,11 @@ SHOPIFY_STORE_DOMAIN=guardian-in.myshopify.com
 SHOPIFY_ACCESS_TOKEN=shpat_xxxxx
 CRO_SOURCE_SPREADSHEET_ID=1uj4fNlMkPPqGFuHgJaKyOg__Abi46KB8F-0cq-t4TF4
 PORT=3000
+
+# Optional — only needed for the AB Tests tab's "Create Ticket" action (see below)
+SDLC_MCP_URL=https://sdlc.oneguardian.in/mcp
+SDLC_MCP_TOKEN=ananta_xxxxx
+SDLC_MCP_BRAND_ID=cmol5u1400008pb6hfy656wh7
 ```
 
 ## Run
@@ -90,6 +95,31 @@ watermark needed). To force a full re-crawl of a watermarked source, clear its S
 `POST /api/meta/upload` — multipart form, field name `file`, accepts the
 "GNC-DAILY-FUNNEL-REPORT-DATA" CSV export format. Upserts into `meta_reports`, keyed by
 campaign + ad + reporting date range — re-uploading the same report overwrites instead of duplicating.
+
+## AB Tests tab → SDLC backlog tickets
+
+The AB Tests tab's status dropdown includes a **"Create Ticket"** action that files the test as a
+task in the Ananta SDLC backlog tool via its remote MCP server (`server/services/sdlcMcp.js`) —
+populates the ticket description with the test's hypothesis, target metric, and page URL. Creating
+a ticket automatically moves the test to "Picked Up". Requires the `SDLC_MCP_*` env vars above;
+without them, everything else in the tab still works, just not that one action. Each test card also
+has a sync-check button that re-verifies its linked ticket still exists in the backlog and clears
+the link if it's gone.
+
+## Dev tool: Claude Code session canvas
+
+`tools/claude-code-canvas` is a vendored copy of
+[raulriera/claude-code-canvas](https://github.com/raulriera/claude-code-canvas) — a local radial
+mind-map viewer for your Claude Code session history (unrelated to the dashboard itself; useful for
+browsing past sessions across this and other projects). Repointed off its default port 3000 (which
+collides with this app's backend) to **4100**.
+
+```
+npm run canvas     # from project root — serves http://localhost:4100
+```
+
+`npm install` at the project root also installs this tool's deps and registers a `post-merge` git
+hook (via `scripts/setup-git-hooks.js`) so future `git pull`s keep it up to date automatically.
 
 ## Status
 
