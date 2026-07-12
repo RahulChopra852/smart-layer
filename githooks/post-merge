@@ -1,0 +1,6 @@
+#!/bin/sh
+# Auto-installs the vendored tools/claude-code-canvas deps after every `git pull`/merge.
+# Installed into .git/hooks by scripts/setup-git-hooks.js (runs via the root `postinstall` script).
+if [ -d "tools/claude-code-canvas" ]; then
+  npm install --prefix tools/claude-code-canvas --silent
+fi

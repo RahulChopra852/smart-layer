@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "start": "node server/index.js",
-    "dev": "node --watch server/index.js"
+    "dev": "node --watch server/index.js",
+    "postinstall": "npm install --prefix tools/claude-code-canvas && node scripts/setup-git-hooks.js",
+    "canvas": "npm start --prefix tools/claude-code-canvas"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.0",
