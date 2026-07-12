@@ -910,10 +910,7 @@ export default function MetaTab() {
   const handleUploaded = useCallback(() => setRefreshKey(k => k + 1), []);
   const reports = data?.reports || [];
 
-  const { accountTotal, dayData, availableDays } = useMemo(() => {
-    const totals = reports.filter(r => r.campaign_name === TOTAL_MARKER);
-    const accountTotal = totals[0] || null;
-
+  const { dayData, availableDays } = useMemo(() => {
     const dayData = {};
     for (const r of reports) {
       if (r.campaign_name === TOTAL_MARKER) continue;
@@ -923,8 +920,18 @@ export default function MetaTab() {
     }
 
     const availableDays = Object.keys(dayData).sort();
-    return { accountTotal, dayData, availableDays };
+    return { dayData, availableDays };
   }, [reports]);
+
+  // Meta's own "Totals" row (accountTotal) only reflects whichever single CSV upload happened to
+  // be first in the reports list — with multiple days' reports uploaded, that silently showed
+  // one arbitrary day's numbers labeled as if they were the account's overall performance.
+  // combineRows re-sums every real campaign/ad row across every uploaded day into one true
+  // combined total instead, and (as a bonus) no longer depends on a Totals row existing at all.
+  const combinedTotal = useMemo(() => {
+    const allRows = availableDays.flatMap(d => dayData[d].campaigns);
+    return allRows.length ? combineRows(allRows) : null;
+  }, [dayData, availableDays]);
 
   // 'week' rolls every uploaded day up per ad; otherwise show a specific day's raw rows.
   const [range, setRange] = useState('week');
@@ -962,7 +969,7 @@ export default function MetaTab() {
           <div>
             <h2 className="text-base font-semibold text-text-primary">Meta Ads Analysis</h2>
             <p className="text-xs text-text-muted mt-0.5">
-              {accountTotal ? `${accountTotal.reporting_start} to ${accountTotal.reporting_end}` : 'Upload daily Meta CSV exports'}
+              {availableDays.length ? `${availableDays[0]} to ${availableDays[availableDays.length - 1]} · combined across all ads` : 'Upload daily Meta CSV exports'}
             </p>
           </div>
           <UploadForm onUploaded={handleUploaded} />
@@ -977,21 +984,22 @@ export default function MetaTab() {
             <p className="text-sm text-text-muted mb-2">No Meta reports uploaded yet</p>
             <p className="text-xs text-text-muted">Upload a GNC Daily Funnel Report CSV to get started</p>
           </div>
-        ) : accountTotal ? (
+        ) : combinedTotal ? (
           <>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
-              <KpiCard label="Total Spend" value={inr(pf(accountTotal.amount_spent))} />
-              <KpiCard label="Purchases" value={fmt(pf(accountTotal.website_purchases))} />
-              <KpiCard label="ROAS" value={`${fmt(pf(accountTotal.roas))}x`} color={pf(accountTotal.roas) >= 2.5 ? 'text-positive' : 'text-negative'} />
-              <KpiCard label="AOV" value={inr(pf(accountTotal.aov))} />
+              <KpiCard label="Total Spend" value={inr(pf(combinedTotal.amount_spent))} />
+              <KpiCard label="Purchases" value={fmt(pf(combinedTotal.website_purchases))} />
+              <KpiCard label="ROAS" value={`${fmt(pf(combinedTotal.roas))}x`} color={pf(combinedTotal.roas) >= 2.5 ? 'text-positive' : 'text-negative'} />
+              <KpiCard label="AOV" value={inr(pf(combinedTotal.aov))} />
             </div>
-            <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
-              <KpiCard label="LC → LPV" value={pctD(x100(accountTotal.lc_to_lpv))} sub={`${fmt(pf(accountTotal.lpv))} LPVs`} />
-              <KpiCard label="LPV → A2C" value={pctD(x100(accountTotal.lpv_to_a2c))} />
-              <KpiCard label="A2C → CI" value={pctD(x100(accountTotal.a2c_to_ci))} />
-              <KpiCard label="CI → Order" value={pctD(x100(accountTotal.ci_to_order))} />
-              <KpiCard label="CVR" value={pctD(x100(accountTotal.cvr_pct))} />
-              <KpiCard label="Hook Rate" value={pctD(x100(accountTotal.hook_rate))} />
+            <div className="grid grid-cols-2 lg:grid-cols-7 gap-3">
+              <KpiCard label="Link Clicks" value={fmt(pf(combinedTotal.link_clicks))} sub="users who clicked the ad" />
+              <KpiCard label="LC → LPV" value={pctD(x100(combinedTotal.lc_to_lpv))} sub={`${fmt(pf(combinedTotal.lpv))} LPVs`} />
+              <KpiCard label="LPV → A2C" value={pctD(x100(combinedTotal.lpv_to_a2c))} sub="landing page view → add to cart" />
+              <KpiCard label="A2C → CI" value={pctD(x100(combinedTotal.a2c_to_ci))} />
+              <KpiCard label="CI → Order" value={pctD(x100(combinedTotal.ci_to_order))} />
+              <KpiCard label="CVR" value={pctD(x100(combinedTotal.cvr_pct))} />
+              <KpiCard label="Hook Rate" value={pctD(x100(combinedTotal.hook_rate))} />
             </div>
           </>
         ) : (

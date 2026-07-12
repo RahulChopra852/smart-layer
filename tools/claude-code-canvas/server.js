@@ -157,9 +157,80 @@ function detectBranch(projectPath) {
   }
 }
 
+// Fallback used when ~/.claude/history.jsonl doesn't exist (some Claude Code setups never write
+// it) — rebuilds the same session shape directly from the per-project *.jsonl transcripts under
+// PROJECTS_DIR instead, since that's the one thing guaranteed to be there.
+function loadSessionsFromProjectsDir() {
+  const sessions = [];
+  let dirs;
+  try { dirs = fs.readdirSync(PROJECTS_DIR); } catch { return sessions; }
+
+  for (const dir of dirs) {
+    const dirPath = path.join(PROJECTS_DIR, dir);
+    let stat;
+    try { stat = fs.statSync(dirPath); } catch { continue; }
+    if (!stat.isDirectory()) continue;
+
+    let files;
+    try { files = fs.readdirSync(dirPath); } catch { continue; }
+
+    for (const file of files) {
+      if (!file.endsWith('.jsonl')) continue;
+      const sessionId = file.slice(0, -'.jsonl'.length);
+      const filePath = path.join(dirPath, file);
+
+      let entries;
+      try {
+        entries = fs.readFileSync(filePath, 'utf-8')
+          .split('\n')
+          .filter(Boolean)
+          .map(l => { try { return JSON.parse(l); } catch { return null; } })
+          .filter(Boolean);
+      } catch { continue; }
+      if (entries.length === 0) continue;
+
+      let prompt = '', cwd = null, branch = null;
+      for (const e of entries) {
+        if (!cwd && e.cwd) cwd = e.cwd;
+        if (!branch && e.gitBranch) branch = e.gitBranch;
+        if (!prompt && e.type === 'user' && e.message?.content) {
+          const blocks = Array.isArray(e.message.content) ? e.message.content : [{ type: 'text', text: e.message.content }];
+          // Skip synthetic wrapper blocks (e.g. <ide_selection>...</ide_selection>) to find the
+          // actual typed prompt.
+          const textBlock = blocks.find(b => b.type === 'text' && b.text && !b.text.trimStart().startsWith('<'));
+          if (textBlock) prompt = textBlock.text.slice(0, 300);
+        }
+        if (prompt && cwd && branch) break;
+      }
+      if (!prompt) continue; // no real user turn in this transcript (e.g. pure tool/queue session)
+
+      const last = entries[entries.length - 1];
+      const lastTs = last.timestamp ? Date.parse(last.timestamp) : 0;
+      const projectPath = cwd || 'unknown';
+
+      const parsed = parseSessionFile(sessionId, projectPath);
+      const resolvedBranch = branch || parsed.branch || detectBranch(parsed.cwd || projectPath);
+
+      const age = (Date.now() - lastTs) / 1000;
+      const status = age < 300 ? 'running' : age < 600 ? 'needsInput' : 'archived';
+
+      sessions.push({
+        id: sessionId,
+        prompt,
+        summary: parsed.summary,
+        status,
+        timestamp: lastTs,
+        projectPath,
+        branch: resolvedBranch,
+      });
+    }
+  }
+  return sessions;
+}
+
 function loadSessions() {
   const entries = parseJsonlFile(HISTORY_FILE);
-  if (entries.length === 0) return [];
+  if (entries.length === 0) return loadSessionsFromProjectsDir();
 
   // Group by sessionId
   const groups = {};

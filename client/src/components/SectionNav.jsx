@@ -1,24 +1,14 @@
 import { useEffect, useState } from 'react';
 
-const SCROLL_THRESHOLD = 120; // px scrolled before the panel reveals itself automatically
-
 // In-page "jump to section" nav for tabs with several stacked cards — as tabs get combined into
-// longer pages, this answers "what's further down" without blind scrolling. Closed by default;
-// reveals itself once the user scrolls past SCROLL_THRESHOLD, or via the toggle button at any
-// time (the button's manual state and the scroll-driven state are OR'd together, so scrolling
-// back to the top only auto-hides it if the user hasn't pinned it open manually).
+// longer pages, this answers "what's further down" without blind scrolling. Closed by default,
+// opens only via the toggle button — it used to also auto-reveal on scroll, but since it's
+// `position: fixed` to the real viewport edge (not the centered/narrower content column), that
+// meant it could pop open and sit directly on top of page content (most visibly on full-width
+// tabs) while someone was just reading, not asking for it.
 export default function SectionNav({ sections }) {
-  const [scrolled, setScrolled] = useState(false);
   const [manuallyOpen, setManuallyOpen] = useState(false);
   const [active, setActive] = useState(sections?.[0]?.id || null);
-
-  useEffect(() => {
-    function handleScroll() {
-      setScrolled(window.scrollY > SCROLL_THRESHOLD);
-    }
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
 
   // Highlights whichever section is currently nearest the top of the viewport, so the nav
   // reflects scroll position even when the user scrolls manually instead of clicking a link.
@@ -38,7 +28,7 @@ export default function SectionNav({ sections }) {
   }, [sections]);
 
   if (!sections || sections.length === 0) return null;
-  const open = scrolled || manuallyOpen;
+  const open = manuallyOpen;
 
   function scrollToSection(id) {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
