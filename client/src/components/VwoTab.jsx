@@ -1,5 +1,12 @@
 import { useState, useCallback } from 'react';
 import { useApi } from '../hooks/useApi';
+import SectionNav from './SectionNav';
+
+const VWO_SECTIONS = [
+  { id: 'vwo-overview', label: 'Overview' },
+  { id: 'vwo-running', label: 'Currently Running' },
+  { id: 'vwo-all-campaigns', label: 'All Campaigns' },
+];
 
 function SyncButton({ onSynced }) {
   const [syncing, setSyncing] = useState(false);
@@ -115,7 +122,8 @@ export default function VwoTab() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="bg-card border border-border rounded-lg p-4">
+      <SectionNav sections={VWO_SECTIONS} />
+      <div className="bg-card border border-border rounded-lg p-4" id="vwo-overview">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-base font-semibold text-text-primary">VWO AB Tests</h2>
@@ -174,7 +182,7 @@ export default function VwoTab() {
       </div>
 
       {running.length > 0 && (
-        <div className="bg-card border border-border rounded-lg p-4">
+        <div className="bg-card border border-border rounded-lg p-4" id="vwo-running">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-semibold text-text-primary">Currently Running</h2>
             <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-positive/15 text-positive">{running.length} live</span>
@@ -186,7 +194,7 @@ export default function VwoTab() {
       )}
 
       {campaigns.length > 0 && (
-        <div className="bg-card border border-border rounded-lg p-4">
+        <div className="bg-card border border-border rounded-lg p-4" id="vwo-all-campaigns">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-semibold text-text-primary">All Campaigns</h2>
             <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-accent/15 text-accent">{campaigns.length} total</span>

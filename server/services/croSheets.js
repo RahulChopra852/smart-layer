@@ -41,6 +41,10 @@ function toNum(val) {
   return isNaN(n) ? null : n;
 }
 
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 // Reads the "CRO-Auto" tab (web channel) since a given date.
 // Column layout confirmed from prior session (see chat history) — columns A,B,C,D,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,AA,AB,AC
 // per the user-provided screenshot: Date, Sessions, ATC, IC, RPP, ATC%, IC%, RPP%, CVR%, Comments etc.
@@ -90,7 +94,11 @@ export async function fetchCroWebSince(sinceDate, tabName = 'CRO-Auto') {
     const row = values[i];
     if (!row || !row[idx.date]) continue;
     const date = parseDateCell(row[idx.date]);
-    if (sinceDate && date <= sinceDate) continue;
+    // Skip anything already synced — except today. Today's row keeps changing all day as the
+    // sheet's live formulas update, so treating it as "done" the first time it appears (the old
+    // behavior) froze it at whatever partial value it had the moment the watermark first reached
+    // today, and it never got refreshed again until the next calendar day.
+    if (sinceDate && date <= sinceDate && date !== todayIso()) continue;
 
     // Skip empty template rows (dates pre-filled ahead of time with no metrics entered yet) —
     // check Sessions specifically, since other cells (e.g. Orders) can hold a literal 0 rather
@@ -152,7 +160,11 @@ export async function fetchCroAppSince(sinceDate, tabName = 'Funnel(App)') {
     const row = values[i];
     if (!row || !row[idx.date]) continue;
     const date = parseDateCell(row[idx.date]);
-    if (sinceDate && date <= sinceDate) continue;
+    // Skip anything already synced — except today. Today's row keeps changing all day as the
+    // sheet's live formulas update, so treating it as "done" the first time it appears (the old
+    // behavior) froze it at whatever partial value it had the moment the watermark first reached
+    // today, and it never got refreshed again until the next calendar day.
+    if (sinceDate && date <= sinceDate && date !== todayIso()) continue;
 
     const sessions = toNum(row[idx.sessions]);
     const atc = toNum(row[idx.atc]);

@@ -1,6 +1,12 @@
 import { useState } from 'react';
 import { useApi } from '../hooks/useApi';
 import WebVitals from './WebVitals';
+import SectionNav from './SectionNav';
+
+const VITALS_SECTIONS = [
+  { id: 'vitals-psi-summary', label: 'PSI Daily Summary' },
+  { id: 'vitals-web-vitals', label: 'Web Vitals' },
+];
 
 function pf(v) { const n = parseFloat(v); return isNaN(n) ? null : n; }
 function lcpColor(v) { return v > 4 ? 'text-negative' : v > 2.5 ? 'text-warning' : 'text-positive'; }
@@ -123,8 +129,9 @@ function PsiDailySummary() {
 export default function WebVitalsTab({ start, end }) {
   return (
     <div className="flex flex-col gap-4">
-      <PsiDailySummary />
-      <WebVitals start={start} end={end} />
+      <SectionNav sections={VITALS_SECTIONS} />
+      <div id="vitals-psi-summary"><PsiDailySummary /></div>
+      <div id="vitals-web-vitals"><WebVitals start={start} end={end} /></div>
     </div>
   );
 }

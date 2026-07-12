@@ -1,5 +1,13 @@
 import { useState, useMemo } from 'react';
 import { useApi } from '../hooks/useApi';
+import SectionNav from './SectionNav';
+
+const GOOGLE_ADS_SECTIONS = [
+  { id: 'google-ads-header', label: 'Overview' },
+  { id: 'google-ads-channel', label: 'Spend by Channel' },
+  { id: 'google-ads-campaigns', label: 'Top Campaigns' },
+  { id: 'google-ads-daily', label: 'Daily Performance' },
+];
 
 const pf = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n; };
 const fmt = (v) => v == null ? '—' : v.toLocaleString();
@@ -218,8 +226,9 @@ export default function GoogleAdsTab() {
 
   return (
     <div className="flex flex-col gap-4">
+      <SectionNav sections={GOOGLE_ADS_SECTIONS} />
       {/* Header + Stats */}
-      <div className="bg-card border border-border rounded-lg p-4">
+      <div className="bg-card border border-border rounded-lg p-4" id="google-ads-header">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-base font-semibold text-text-primary">Google Ads</h2>
@@ -273,13 +282,13 @@ export default function GoogleAdsTab() {
       </div>
 
       {/* Channel breakdown */}
-      {daily.length > 0 && <TypeBreakdown daily={selectedDate ? daily.filter(d => d.date === selectedDate) : daily} />}
+      {daily.length > 0 && <div id="google-ads-channel"><TypeBreakdown daily={selectedDate ? daily.filter(d => d.date === selectedDate) : daily} /></div>}
 
       {/* Top campaigns */}
-      {daily.length > 0 && <CampaignsTable selectedDate={selectedDate} />}
+      {daily.length > 0 && <div id="google-ads-campaigns"><CampaignsTable selectedDate={selectedDate} /></div>}
 
       {/* Daily table */}
-      {daily.length > 0 && <DailyTable daily={daily} />}
+      {daily.length > 0 && <div id="google-ads-daily"><DailyTable daily={daily} /></div>}
     </div>
   );
 }

@@ -5,7 +5,18 @@ import DayTrend from './DayTrend';
 import RcaSnapshot, { useRcaProblems } from './RcaSnapshot';
 import CommerceSnapshot from './CommerceSnapshot';
 import MainMovers from './MainMovers';
+import SectionNav from './SectionNav';
 import { useApi } from '../hooks/useApi';
+
+const SECTIONS = [
+  { id: 'cro-commerce-snapshot', label: 'Commerce Snapshot' },
+  { id: 'cro-todays-rca', label: "Today's RCA" },
+  { id: 'cro-main-movers', label: 'Main Movers' },
+  { id: 'cro-day-trend', label: 'Day Trend' },
+  { id: 'cro-funnel', label: 'CRO Funnel' },
+  { id: 'cro-weekly-funnel', label: 'Weekly Funnel' },
+  { id: 'cro-page-performance', label: 'Top / Worst Pages' },
+];
 
 function fmt(n) { return n != null ? n.toLocaleString() : '—'; }
 function pct(n) { if (n == null || isNaN(n)) return '—'; return `${n.toFixed(1)}%`; }
@@ -343,6 +354,7 @@ export default function CroDashboard({ start, end }) {
 
   return (
     <div className="flex flex-col gap-4">
+      <SectionNav sections={SECTIONS} />
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h2 className="text-base font-semibold text-text-primary">CRO Dashboard</h2>
@@ -350,13 +362,13 @@ export default function CroDashboard({ start, end }) {
         </div>
         <CroSyncBar onSynced={() => setRefreshKey(k => k + 1)} />
       </div>
-      <CommerceSnapshot key={`commerce-${refreshKey}`} />
-      <RcaSnapshot key={`rca-${refreshKey}`} />
-      <DayTrend key={`daytrend-${refreshKey}`} />
-      <CroFunnel start={start} end={end} key={`funnel-${refreshKey}`} />
-      <WeeklyFunnel start={start} end={end} key={`weekly-${refreshKey}`} onSynced={() => setRefreshKey(k => k + 1)} />
-      <MainMovers end={end} key={`movers-${refreshKey}`} />
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" key={`pages-${refreshKey}`}>
+      <div id="cro-commerce-snapshot"><CommerceSnapshot key={`commerce-${refreshKey}`} /></div>
+      <div id="cro-todays-rca"><RcaSnapshot key={`rca-${refreshKey}`} /></div>
+      <div id="cro-main-movers"><MainMovers end={end} key={`movers-${refreshKey}`} /></div>
+      <div id="cro-day-trend"><DayTrend key={`daytrend-${refreshKey}`} /></div>
+      <div id="cro-funnel"><CroFunnel start={start} end={end} key={`funnel-${refreshKey}`} /></div>
+      <div id="cro-weekly-funnel"><WeeklyFunnel start={start} end={end} key={`weekly-${refreshKey}`} onSynced={() => setRefreshKey(k => k + 1)} /></div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" id="cro-page-performance" key={`pages-${refreshKey}`}>
         <PagePerformance start={start} end={end} mode="top" />
         <PagePerformance start={start} end={end} mode="worst" />
       </div>

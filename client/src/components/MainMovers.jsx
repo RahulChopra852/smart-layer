@@ -2,14 +2,14 @@ import { useState } from 'react';
 import { useApi } from '../hooks/useApi';
 
 const fmt = (v) => v == null ? '—' : Math.round(v).toLocaleString();
+const inr = (v) => v == null ? '—' : `₹${Math.round(v).toLocaleString()}`;
 
+// ATC/IC/RPP/Orders/CVR% moved to Commerce Snapshot — those are account-wide, not per landing
+// page, so they don't fit this card's page-mover focus. Sessions/Revenue/Units Sold remain.
 const METRIC_LABELS = {
   sessions: 'Sessions',
-  atc: 'ATC',
-  ic: 'CI',
-  rpp: 'RPP',
-  orders: 'Orders',
-  cvr_pct: 'CVR%',
+  revenue: 'Revenue',
+  units_sold: 'Units Sold',
 };
 
 const WINDOWS = [
@@ -19,13 +19,13 @@ const WINDOWS = [
 ];
 
 function MetricCard({ m }) {
-  const isPct = m.metric === 'cvr_pct';
-  const fmtVal = (v) => v == null ? '—' : isPct ? `${v.toFixed(2)}%` : fmt(v);
+  const isCurrency = m.metric === 'revenue';
+  const fmtVal = (v) => v == null ? '—' : isCurrency ? inr(v) : fmt(v);
   const up = m.change != null && m.change > 0;
   const down = m.change != null && m.change < 0;
   return (
     <div className="bg-bg rounded-md p-3 border border-border/50">
-      <div className="text-[10px] text-text-muted uppercase mb-0.5">{METRIC_LABELS[m.metric] || m.metric}</div>
+      <div className="text-xs font-semibold text-text-secondary mb-1">{METRIC_LABELS[m.metric] || m.metric}</div>
       <div className="text-lg font-bold text-text-primary">{fmtVal(m.curr)}</div>
       <div className="flex items-center justify-between mt-1">
         <span className="text-[10px] text-text-muted">prev: {fmtVal(m.prior)}</span>
@@ -85,7 +85,13 @@ export default function MainMovers({ end }) {
 
       {data && (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-4">
+          <h3 className="text-xs font-semibold text-text-primary mb-2">Sessions &amp; Sales — current vs prior period</h3>
+          {data.salesRange.end !== data.currRange.end && (
+            <p className="text-[11px] text-text-muted mb-2">
+              Revenue/Units Sold reflect {data.salesRange.start} to {data.salesRange.end} — Shopify's nightly sync hasn't posted {data.currRange.end} yet.
+            </p>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
             {data.metrics.map(m => <MetricCard key={m.metric} m={m} />)}
           </div>
 

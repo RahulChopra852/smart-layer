@@ -1,5 +1,10 @@
 import { useState } from 'react';
 import { useApi } from '../hooks/useApi';
+import SectionNav from './SectionNav';
+
+const ANOMALIES_SECTIONS = [
+  { id: 'anomalies-summary', label: 'Session Anomalies' },
+];
 
 function Tooltip({ text, children }) {
   const [show, setShow] = useState(false);
@@ -35,8 +40,9 @@ export default function AnomaliesTab({ start }) {
 
   return (
     <div className="flex flex-col gap-4">
+      <SectionNav sections={ANOMALIES_SECTIONS} />
       {/* Summary */}
-      <div className="bg-card border border-border rounded-lg p-4">
+      <div className="bg-card border border-border rounded-lg p-4" id="anomalies-summary">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-base font-semibold text-text-primary">Session Anomalies</h2>

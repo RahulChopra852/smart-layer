@@ -1,5 +1,16 @@
 import { useState } from 'react';
 import { useApi } from '../hooks/useApi';
+import SectionNav from './SectionNav';
+
+const GA_APP_SECTIONS = [
+  { id: 'ga-app-overview', label: 'Current Month Overview' },
+  { id: 'ga-app-product-pages', label: 'Product Pages' },
+  { id: 'ga-app-installs', label: 'Installs Tracker' },
+  { id: 'ga-app-monthly-comparison', label: 'Monthly Comparison' },
+  { id: 'ga-app-period-totals', label: 'Period Totals' },
+  { id: 'ga-app-monthly-breakdown', label: 'Monthly Breakdown' },
+  { id: 'ga-app-top-events-screens', label: 'Top Events / Screens' },
+];
 
 function fmt(n) { return n != null ? n.toLocaleString() : '—'; }
 function fmtDur(s) { if (s == null) return '—'; const m = Math.floor(s / 60); return `${m}m ${Math.round(s % 60)}s`; }
@@ -405,13 +416,14 @@ export default function GaAppTab({ start, end }) {
 
   return (
     <div className="flex flex-col gap-4">
+      <SectionNav sections={GA_APP_SECTIONS} />
       <div className="flex items-center justify-between">
         <h2 className="text-base font-semibold text-text-primary">GA App</h2>
         <GaSyncBar onSynced={() => setRefreshKey(k => k + 1)} />
       </div>
 
       {/* KPIs - Current Month */}
-      <div className="bg-card border border-border rounded-lg p-4">
+      <div className="bg-card border border-border rounded-lg p-4" id="ga-app-overview">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-base font-semibold text-text-primary">Current Month Overview</h2>
@@ -435,19 +447,19 @@ export default function GaAppTab({ start, end }) {
       </div>
 
       {/* Product Pages — sessions/ATC per product, own date range */}
-      <ProductPagesCard start={start} end={end} />
+      <div id="ga-app-product-pages"><ProductPagesCard start={start} end={end} /></div>
 
       {/* Installs Tracker with month picker */}
-      {months.length > 0 && <InstallsTracker byMonth={byMonth} months={months} />}
+      {months.length > 0 && <div id="ga-app-installs"><InstallsTracker byMonth={byMonth} months={months} /></div>}
 
       {/* Monthly Comparison */}
-      {months.length > 0 && <MonthlyComparison byMonth={byMonth} months={months} />}
+      {months.length > 0 && <div id="ga-app-monthly-comparison"><MonthlyComparison byMonth={byMonth} months={months} /></div>}
 
       {/* Period Totals */}
-      {months.length > 0 && <PeriodTotals months={months} byMonth={byMonth} />}
+      {months.length > 0 && <div id="ga-app-period-totals"><PeriodTotals months={months} byMonth={byMonth} /></div>}
 
       {/* Monthly Breakdown */}
-      <div className="bg-card border border-border rounded-lg p-4">
+      <div className="bg-card border border-border rounded-lg p-4" id="ga-app-monthly-breakdown">
         <h2 className="text-base font-semibold text-text-primary mb-3">Monthly Breakdown</h2>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -487,7 +499,7 @@ export default function GaAppTab({ start, end }) {
       </div>
 
       {/* Top Events + Top Screens */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" id="ga-app-top-events-screens">
         <div className="bg-card border border-border rounded-lg p-4">
           <h2 className="text-base font-semibold text-text-primary mb-3">Top Events</h2>
           <div className="overflow-x-auto">

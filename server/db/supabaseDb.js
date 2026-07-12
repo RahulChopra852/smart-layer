@@ -47,7 +47,7 @@ export const TAB_SCHEMAS = {
   gokwik_utm: ['date', 'utm_source', 'utm_medium', 'utm_campaign', 'order_count'],
   gokwik_landing_pages: ['date', 'landing_page', 'order_count', 'top_utm_source'],
   oos_log: ['product_id', 'product_title', 'handle', 'sku', 'oos_since', 'restocked_at', 'status'],
-  ab_tests: ['id', 'metric', 'area', 'name', 'hypothesis', 'impact', 'status', 'source', 'page_url', 'created_at'],
+  ab_tests: ['id', 'metric', 'area', 'name', 'hypothesis', 'impact', 'status', 'source', 'page_url', 'created_at', 'ticket_code'],
   _sync_state: ['source', 'last_synced_date', 'last_synced_at']
 };
 

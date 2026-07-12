@@ -1,5 +1,15 @@
 import { useState, useMemo } from 'react';
 import { useApi } from '../hooks/useApi';
+import SectionNav from './SectionNav';
+
+const GOKWIK_SECTIONS = [
+  { id: 'gokwik-header', label: 'Overview' },
+  { id: 'gokwik-products', label: 'Products Sold' },
+  { id: 'gokwik-utm', label: 'UTM Attribution' },
+  { id: 'gokwik-landing-pages', label: 'Landing Pages' },
+  { id: 'gokwik-daily-table', label: 'Daily Breakdown' },
+  { id: 'gokwik-loyalty', label: 'Loyalty Points DoD' },
+];
 
 const pf = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n; };
 const fmt = (v) => v == null ? '—' : v.toLocaleString();
@@ -438,8 +448,9 @@ export default function GokwikTab() {
 
   return (
     <div className="flex flex-col gap-4">
+      <SectionNav sections={GOKWIK_SECTIONS} />
       {/* Header + stats */}
-      <div className="bg-card border border-border rounded-lg p-4">
+      <div className="bg-card border border-border rounded-lg p-4" id="gokwik-header">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-base font-semibold text-text-primary">GoKwik Orders</h2>
@@ -506,19 +517,19 @@ export default function GokwikTab() {
       </div>
 
       {/* Products sold */}
-      {daily.length > 0 && <ProductsSection selectedDate={selectedDate} />}
+      {daily.length > 0 && <div id="gokwik-products"><ProductsSection selectedDate={selectedDate} /></div>}
 
       {/* UTM Attribution */}
-      {daily.length > 0 && <UtmSection selectedDate={selectedDate} />}
+      {daily.length > 0 && <div id="gokwik-utm"><UtmSection selectedDate={selectedDate} /></div>}
 
       {/* Landing Pages */}
-      {daily.length > 0 && <LandingPagesSection selectedDate={selectedDate} />}
+      {daily.length > 0 && <div id="gokwik-landing-pages"><LandingPagesSection selectedDate={selectedDate} /></div>}
 
       {/* Daily table */}
-      {daily.length > 0 && <DailyTable daily={daily} />}
+      {daily.length > 0 && <div id="gokwik-daily-table"><DailyTable daily={daily} /></div>}
 
       {/* Loyalty Points DoD */}
-      <LoyaltyTrend daily={daily} />
+      <div id="gokwik-loyalty"><LoyaltyTrend daily={daily} /></div>
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { generateAbTest } from '../services/abTests.js';
 import { fetchAnomalies, fetchDailyVisitors } from '../services/croSheets.js';
 import { getAppOverview, getWebOverview, getProductPageInsights } from '../services/ga.js';
 import { fetchLowStockAlerts, fetchHourlyOrders } from '../services/shopify.js';
+import { createSdlcTask, taskExists } from '../services/sdlcMcp.js';
 
 const router = express.Router();
 
@@ -563,12 +564,66 @@ router.post('/ab-tests/generate', async (req, res) => {
 
 router.patch('/ab-tests/:id/status', async (req, res) => {
   const { status } = req.body;
-  const validStatuses = ['picked_up', 'already_exists', 'ab_completed', null];
+  const validStatuses = ['picked_up', 'already_exists', null];
   if (!validStatuses.includes(status)) return res.status(400).json({ error: 'invalid status' });
   try {
     const ok = await updateRowByKey('ab_tests', 'id', req.params.id, { status });
     if (!ok) return res.status(404).json({ error: 'test not found' });
     res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/analytics/ab-tests/:id/create-ticket — files this test as a backlog task in the
+// SDLC tool (Ananta), populating the description with the hypothesis and objective so whoever
+// picks it up doesn't have to come back to this dashboard for context.
+router.post('/ab-tests/:id/create-ticket', async (req, res) => {
+  try {
+    const rows = await readRows('ab_tests');
+    // ab_tests.id is numeric in Postgres but req.params.id is always a string — compare as
+    // strings so this doesn't silently fail to match like a strict === would.
+    const test = rows.find(r => String(r.id) === req.params.id);
+    if (!test) return res.status(404).json({ error: 'test not found' });
+    if (test.ticket_code) return res.json({ ok: true, code: test.ticket_code, alreadyExisted: true });
+
+    const metricLabel = test.metric || 'Conversion';
+    const title = `AB Test: ${test.name && test.name !== 'Pending Claude analysis' ? test.name : `${metricLabel} — ${test.area || 'Site'}`}`;
+
+    // The SDLC task description is a rich-text (HTML) field, not a markdown renderer — a
+    // discovery made the hard way when **bold** showed up as literal asterisks. Real <strong>
+    // tags render correctly there; escape dynamic values first since they're user-entered data.
+    const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const description = [
+      `<p><strong>Objective:</strong> Improve ${esc(metricLabel)} on ${esc(test.area || 'the target page')} by validating the hypothesis below with an A/B test.</p>`,
+      `<p><strong>Hypothesis:</strong> ${esc(test.hypothesis)}</p>`,
+      `<p><strong>Target metric:</strong> ${esc(metricLabel)}</p>`,
+      test.page_url ? `<p><strong>Page:</strong> ${esc(test.page_url)}</p>` : null,
+      test.impact ? `<p><strong>Estimated impact:</strong> ${esc(test.impact)}</p>` : null,
+      '<p><em>Filed from the GNC Smart Layer dashboard AB Tests tab.</em></p>',
+    ].filter(Boolean).join('');
+
+    const { code } = await createSdlcTask({ title, description, discipline: 'DEVELOPMENT', type: 'FEATURE' });
+    if (code) await updateRowByKey('ab_tests', 'id', test.id, { ticket_code: code, status: 'picked_up' });
+    res.json({ ok: true, code, status: code ? 'picked_up' : test.status });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/analytics/ab-tests/:id/verify-ticket — re-checks the linked ticket against the
+// SDLC backlog. If it's gone (e.g. deleted there), clears ticket_code here too so "Create
+// Ticket" reappears in the status dropdown instead of the badge pointing at a dead task forever.
+router.post('/ab-tests/:id/verify-ticket', async (req, res) => {
+  try {
+    const rows = await readRows('ab_tests');
+    const test = rows.find(r => String(r.id) === req.params.id);
+    if (!test) return res.status(404).json({ error: 'test not found' });
+    if (!test.ticket_code) return res.status(400).json({ error: 'this test has no ticket to verify' });
+
+    const exists = await taskExists(test.ticket_code);
+    if (!exists) await updateRowByKey('ab_tests', 'id', test.id, { ticket_code: null });
+    res.json({ exists, code: test.ticket_code });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef } from 'react';
 import { useApi } from '../hooks/useApi';
+import SectionNav from './SectionNav';
 
 function Delta({ value, suffix = '' }) {
   if (value == null || isNaN(value)) return <span className="text-[11px] text-text-muted">—</span>;
@@ -722,15 +723,25 @@ function LowStockWatchCard() {
   );
 }
 
+const SECTIONS = [
+  { id: 'products-low-stock-watch', label: 'Low Stock Watch' },
+  { id: 'products-insights', label: 'Products Insights' },
+  { id: 'products-focus-product', label: 'Focus Product' },
+  { id: 'products-low-stock', label: 'Low Stock' },
+  { id: 'products-oos-sessions', label: 'Sessions Lost While OOS' },
+  { id: 'products-oos-history', label: 'OOS History' },
+];
+
 export default function ProductsTab({ start, end }) {
   return (
     <div className="flex flex-col gap-4">
-      <LowStockWatchCard />
-      <ProductsInsightsCard start={start} end={end} />
-      <FocusProductCard />
-      <LowStockCard />
-      <OosSessionsCard />
-      <OosHistoryCard />
+      <SectionNav sections={SECTIONS} />
+      <div id="products-low-stock-watch"><LowStockWatchCard /></div>
+      <div id="products-insights"><ProductsInsightsCard start={start} end={end} /></div>
+      <div id="products-focus-product"><FocusProductCard /></div>
+      <div id="products-low-stock"><LowStockCard /></div>
+      <div id="products-oos-sessions"><OosSessionsCard /></div>
+      <div id="products-oos-history"><OosHistoryCard /></div>
     </div>
   );
 }

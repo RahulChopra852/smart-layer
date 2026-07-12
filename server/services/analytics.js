@@ -24,6 +24,7 @@ export async function getCommerceSnapshot() {
   const shopifyByDate = new Map(shopifyRows.map(r => [r.date, r]));
   const croWebByDate = new Map(croRows.filter(r => r.channel === 'web').map(r => [r.date, r]));
   const shopifyOrdersSyncedAt = syncState.find(s => s.source === 'shopify_orders')?.last_synced_at || null;
+  const croWebSyncedAt = syncState.find(s => s.source === 'cro_web')?.last_synced_at || null;
 
   const ordersFor = (date) => {
     const r = croWebByDate.get(date);
@@ -31,6 +32,8 @@ export async function getCommerceSnapshot() {
       total: parseInt(r?.orders, 10) || 0,
       web: parseInt(r?.web_orders, 10) || 0,
       app: parseInt(r?.app_orders, 10) || 0,
+      sessions: parseFloat(r?.sessions) || 0,
+      atc: parseFloat(r?.atc) || 0,
     };
   };
   const revenueFor = (date) => {
@@ -43,15 +46,17 @@ export async function getCommerceSnapshot() {
   const dayBefore = dateDaysAgo(2);
 
   const ordersSumRange = (start, end) => {
-    let total = 0, web = 0, app = 0;
+    let total = 0, web = 0, app = 0, sessions = 0, atc = 0;
     for (const r of croRows) {
       if (r.channel === 'web' && r.date >= start && r.date <= end) {
         total += parseInt(r.orders, 10) || 0;
         web += parseInt(r.web_orders, 10) || 0;
         app += parseInt(r.app_orders, 10) || 0;
+        sessions += parseFloat(r.sessions) || 0;
+        atc += parseFloat(r.atc) || 0;
       }
     }
-    return { total, web, app };
+    return { total, web, app, sessions, atc };
   };
   const revenueSumRange = (start, end) => {
     let units = 0, revenue = 0;
@@ -76,6 +81,12 @@ export async function getCommerceSnapshot() {
   const revenueLast7 = revenueSumRange(dateDaysAgo(7), yesterday);
   const revenuePrior7 = revenueSumRange(dateDaysAgo(14), dateDaysAgo(8));
 
+  const cvrFor = (o) => o.sessions > 0 ? o.total / o.sessions * 100 : null;
+  const todayCvr = cvrFor(todayOrders);
+  const yesterdayCvr = cvrFor(yesterdayOrders);
+  const last7Cvr = cvrFor(ordersLast7);
+  const prior7Cvr = cvrFor(ordersPrior7);
+
   return {
     orders: {
       today: { date: today, ...todayOrders },
@@ -85,6 +96,21 @@ export async function getCommerceSnapshot() {
       prior7: { ...ordersPrior7 },
       wowDelta: ordersLast7.total - ordersPrior7.total,
     },
+    atc: {
+      today: { date: today, value: todayOrders.atc },
+      last7: { value: ordersLast7.atc },
+      prior7: { value: ordersPrior7.atc },
+      dodDelta: todayOrders.atc - yesterdayOrders.atc,
+      wowDelta: ordersLast7.atc - ordersPrior7.atc,
+    },
+    cvr: {
+      today: { date: today, value: todayCvr },
+      yesterday: { date: yesterday, value: yesterdayCvr },
+      last7: { value: last7Cvr },
+      prior7: { value: prior7Cvr },
+      dodDelta: todayCvr != null && yesterdayCvr != null ? todayCvr - yesterdayCvr : null,
+      wowDelta: last7Cvr != null && prior7Cvr != null ? last7Cvr - prior7Cvr : null,
+    },
     revenue: {
       yesterday: { date: yesterday, ...yesterdayRevenue },
       dayBefore: { date: dayBefore, ...dayBeforeRevenue },
@@ -92,10 +118,13 @@ export async function getCommerceSnapshot() {
       dodRevenueDelta: yesterdayRevenue.revenue - dayBeforeRevenue.revenue,
       last7: revenueLast7,
       prior7: revenuePrior7,
+      last7Range: { start: dateDaysAgo(7), end: yesterday },
+      prior7Range: { start: dateDaysAgo(14), end: dateDaysAgo(8) },
       wowUnitsDelta: revenueLast7.units - revenuePrior7.units,
       wowRevenueDelta: revenueLast7.revenue - revenuePrior7.revenue,
       lastSyncedAt: shopifyOrdersSyncedAt,
-    }
+    },
+    croSyncedAt: croWebSyncedAt,
   };
 }
 
@@ -221,38 +250,65 @@ export async function getMainMovers(windowDays, endDate) {
   const priorStart = shiftDate(endDate, -(windowDays * 2 - 1));
   const priorEnd = shiftDate(endDate, -windowDays);
 
-  const [croRows, pageRows] = await Promise.all([readRows('cro_daily'), readRows('page_sessions')]);
+  const [croRows, pageRows, shopifyRows] = await Promise.all([readRows('cro_daily'), readRows('page_sessions'), readRows('shopify_daily')]);
 
+  // ATC/IC/RPP/Orders/CVR% are account-wide (cro_daily has no landing-page dimension), which
+  // doesn't fit a page-mover-oriented card — those live in Commerce Snapshot instead. Sessions
+  // stays here since it's also the basis for the landing-page gainers/decliners below.
   function sumCro(startDate, endDate) {
     const inRange = croRows.filter(r => r.date >= startDate && r.date <= endDate);
-    const t = { sessions: 0, atc: 0, ic: 0, rpp: 0, orders: 0 };
-    for (const r of inRange) {
-      t.sessions += parseFloat(r.sessions) || 0;
-      t.atc += parseFloat(r.atc) || 0;
-      t.ic += parseFloat(r.ic) || 0;
-      t.rpp += parseFloat(r.rpp) || 0;
-      t.orders += parseFloat(r.orders) || 0;
-    }
-    return t;
+    let sessions = 0;
+    for (const r of inRange) sessions += parseFloat(r.sessions) || 0;
+    return { sessions };
   }
 
   const currTotals = sumCro(currStart, currEnd);
   const priorTotals = sumCro(priorStart, priorEnd);
 
-  const metrics = ['sessions', 'atc', 'ic', 'rpp', 'orders'].map(key => ({
-    metric: key,
-    curr: currTotals[key],
-    prior: priorTotals[key],
-    change: pctChange(currTotals[key], priorTotals[key]),
-  }));
+  const metrics = [{
+    metric: 'sessions',
+    curr: currTotals.sessions,
+    prior: priorTotals.sessions,
+    change: pctChange(currTotals.sessions, priorTotals.sessions),
+  }];
+
+  function sumShopify(startDate, endDate) {
+    const inRange = shopifyRows.filter(r => r.date >= startDate && r.date <= endDate);
+    let units = 0, revenue = 0;
+    for (const r of inRange) {
+      units += parseInt(r.units_sold, 10) || 0;
+      revenue += parseFloat(r.revenue) || 0;
+    }
+    return { units, revenue };
+  }
+
+  // shopify_daily only completes its nightly sync at 00:15 (see scheduler.js), so if `endDate`
+  // is today, that row doesn't exist yet — anchoring the sales window to the funnel metrics'
+  // live endDate would count an unsynced day as literal zero and make sales look like they
+  // cratered. Anchor to the latest date shopify_daily actually has instead (same fix
+  // getCommerceSnapshot uses for its DoD figures), shifting the whole window back so current
+  // and prior stay the same length and comparable.
+  const latestShopifyDate = shopifyRows.length ? [...new Set(shopifyRows.map(r => r.date))].sort().slice(-1)[0] : null;
+  const salesEnd = latestShopifyDate && latestShopifyDate < currEnd ? latestShopifyDate : currEnd;
+  const salesCurrStart = shiftDate(salesEnd, -(windowDays - 1));
+  const salesPriorEnd = shiftDate(salesEnd, -windowDays);
+  const salesPriorStart = shiftDate(salesEnd, -(windowDays * 2 - 1));
+
+  const currSales = sumShopify(salesCurrStart, salesEnd);
+  const priorSales = sumShopify(salesPriorStart, salesPriorEnd);
+
   metrics.push({
-    metric: 'cvr_pct',
-    curr: currTotals.sessions > 0 ? currTotals.orders / currTotals.sessions * 100 : null,
-    prior: priorTotals.sessions > 0 ? priorTotals.orders / priorTotals.sessions * 100 : null,
-    change: null,
+    metric: 'revenue',
+    curr: currSales.revenue,
+    prior: priorSales.revenue,
+    change: pctChange(currSales.revenue, priorSales.revenue),
   });
-  const cvrRow = metrics[metrics.length - 1];
-  cvrRow.change = pctChange(cvrRow.curr, cvrRow.prior);
+  metrics.push({
+    metric: 'units_sold',
+    curr: currSales.units,
+    prior: priorSales.units,
+    change: pctChange(currSales.units, priorSales.units),
+  });
 
   function sumPagesByLandingPage(startDate, endDate) {
     const inRange = pageRows.filter(r => r.date >= startDate && r.date <= endDate && r.source_field === 'utm_source');
@@ -294,6 +350,7 @@ export async function getMainMovers(windowDays, endDate) {
     windowDays,
     currRange: { start: currStart, end: currEnd },
     priorRange: { start: priorStart, end: priorEnd },
+    salesRange: { start: salesCurrStart, end: salesEnd },
     metrics,
     gainers: pageMovers.filter(p => p.change > 0).slice(0, 10),
     decliners: pageMovers.filter(p => p.change < 0).sort((a, b) => a.change - b.change).slice(0, 10),

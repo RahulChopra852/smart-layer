@@ -1,4 +1,13 @@
 import { useApi } from '../hooks/useApi';
+import SectionNav from './SectionNav';
+
+const GA_WEB_SECTIONS = [
+  { id: 'ga-web-overview', label: 'Overview' },
+  { id: 'ga-web-period-totals', label: 'Period Totals' },
+  { id: 'ga-web-daily-breakdown', label: 'Daily Breakdown' },
+  { id: 'ga-web-channels-sources', label: 'Channels / Sources' },
+  { id: 'ga-web-top-pages', label: 'Top Pages' },
+];
 
 function fmt(n) { return n != null ? n.toLocaleString() : '—'; }
 function pctD(n) { return n != null ? `${(n * 100).toFixed(1)}%` : '—'; }
@@ -42,8 +51,9 @@ export default function GaWebTab({ start, end }) {
 
   return (
     <div className="flex flex-col gap-4">
+      <SectionNav sections={GA_WEB_SECTIONS} />
       {/* KPIs */}
-      <div className="bg-card border border-border rounded-lg p-4">
+      <div className="bg-card border border-border rounded-lg p-4" id="ga-web-overview">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-base font-semibold text-text-primary">GA Web Overview</h2>
@@ -61,7 +71,7 @@ export default function GaWebTab({ start, end }) {
       </div>
 
       {/* Period Totals */}
-      <div className="bg-card border border-border rounded-lg p-4">
+      <div className="bg-card border border-border rounded-lg p-4" id="ga-web-period-totals">
         <h2 className="text-base font-semibold text-text-primary mb-3">Period Totals ({daily.length} days)</h2>
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           <KpiCard label="Total Users" value={fmt(totals.users)} />
@@ -73,7 +83,7 @@ export default function GaWebTab({ start, end }) {
       </div>
 
       {/* Daily Breakdown */}
-      <div className="bg-card border border-border rounded-lg p-4">
+      <div className="bg-card border border-border rounded-lg p-4" id="ga-web-daily-breakdown">
         <h2 className="text-base font-semibold text-text-primary mb-3">Daily Breakdown</h2>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -107,7 +117,7 @@ export default function GaWebTab({ start, end }) {
       </div>
 
       {/* Channels + Sources */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" id="ga-web-channels-sources">
         <div className="bg-card border border-border rounded-lg p-4">
           <h2 className="text-base font-semibold text-text-primary mb-3">Traffic Channels</h2>
           <div className="overflow-x-auto">
@@ -164,7 +174,7 @@ export default function GaWebTab({ start, end }) {
       </div>
 
       {/* Top Pages */}
-      <div className="bg-card border border-border rounded-lg p-4">
+      <div className="bg-card border border-border rounded-lg p-4" id="ga-web-top-pages">
         <h2 className="text-base font-semibold text-text-primary mb-3">Top Pages</h2>
         <div className="overflow-x-auto">
           <table className="w-full">

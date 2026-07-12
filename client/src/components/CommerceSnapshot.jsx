@@ -36,22 +36,33 @@ export default function CommerceSnapshot() {
   if (error) return <div className="bg-card border border-border rounded-lg p-4"><p className="text-xs text-negative">{error}</p></div>;
   if (!data) return null;
 
-  const { orders, revenue } = data;
+  const { orders, atc, cvr, revenue, croSyncedAt } = data;
+  const fmtPct = (v) => v == null ? '—' : `${v.toFixed(2)}%`;
 
   return (
     <div className="bg-card border border-border rounded-lg p-4">
       <div className="flex items-center justify-between mb-3">
         <div>
           <h2 className="text-base font-semibold text-text-primary">Commerce Snapshot</h2>
-          <p className="text-xs text-text-muted mt-0.5">Orders: live from CRO sheet (every 2 min) · Revenue/Units: Shopify, once nightly at 12:15am</p>
+          <p className="text-xs text-text-muted mt-0.5">Orders/ATC/CVR%: live from CRO sheet (every 2 min) · Revenue/Units: Shopify, once nightly at 12:15am</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         <div className="bg-bg rounded-md p-3 border border-border/50">
-          <div className="text-[10px] text-text-muted uppercase">Orders Today (live)</div>
+          <div className="text-[10px] text-text-muted uppercase">Orders Today (live) — {orders.today.date}</div>
           <div className="text-xl font-bold text-accent">{fmt(orders.today.total)}<Delta value={orders.dodDelta} /></div>
           <div className="text-[10px] text-text-muted mt-0.5">Web {fmt(orders.today.web)} · App {fmt(orders.today.app)}</div>
+        </div>
+        <div className="bg-bg rounded-md p-3 border border-border/50">
+          <div className="text-[10px] text-text-muted uppercase">ATC Today (live) — {atc.today.date}</div>
+          <div className="text-xl font-bold text-accent">{fmt(atc.today.value)}<Delta value={atc.dodDelta} /></div>
+          <div className="text-[10px] text-text-muted mt-0.5">7d: {fmt(atc.last7.value)} · Prior 7d: {fmt(atc.prior7.value)}</div>
+        </div>
+        <div className="bg-bg rounded-md p-3 border border-border/50">
+          <div className="text-[10px] text-text-muted uppercase">CVR% Today (live) — {cvr.today.date}</div>
+          <div className="text-xl font-bold text-accent">{fmtPct(cvr.today.value)}<Delta value={cvr.dodDelta} /></div>
+          <div className="text-[10px] text-text-muted mt-0.5">Yesterday ({cvr.yesterday.date}): {fmtPct(cvr.yesterday.value)}</div>
         </div>
         <div className="bg-bg rounded-md p-3 border border-border/50">
           <div className="text-[10px] text-text-muted uppercase">Orders: 7d vs Prior 7d</div>
@@ -59,20 +70,26 @@ export default function CommerceSnapshot() {
           <div className="text-[10px] text-text-muted mt-0.5">Prior: {fmt(orders.prior7.total)}</div>
         </div>
         <div className="bg-bg rounded-md p-3 border border-border/50">
-          <div className="text-[10px] text-text-muted uppercase">Units (Yesterday)</div>
+          <div className="text-[10px] text-text-muted uppercase">Units — Yesterday ({revenue.yesterday.date})</div>
           <div className="text-xl font-bold text-text-primary">{fmt(revenue.yesterday.units)}<Delta value={revenue.dodUnitsDelta} /></div>
-          <div className="text-[10px] text-text-muted mt-0.5">Day before: {fmt(revenue.dayBefore.units)}</div>
+          <div className="text-[10px] text-text-muted mt-0.5">Day before ({revenue.dayBefore.date}): {fmt(revenue.dayBefore.units)}</div>
         </div>
         <div className="bg-bg rounded-md p-3 border border-border/50">
-          <div className="text-[10px] text-text-muted uppercase">Revenue (Yesterday)</div>
+          <div className="text-[10px] text-text-muted uppercase">Revenue — Yesterday ({revenue.yesterday.date})</div>
           <div className="text-xl font-bold text-positive">{fmtCur(revenue.yesterday.revenue)}<Delta value={revenue.dodRevenueDelta} /></div>
-          <div className="text-[10px] text-text-muted mt-0.5">Day before: {fmtCur(revenue.dayBefore.revenue)}</div>
+          <div className="text-[10px] text-text-muted mt-0.5">Day before ({revenue.dayBefore.date}): {fmtCur(revenue.dayBefore.revenue)}</div>
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between text-[10px] text-text-muted">
-        <span>Revenue: 7d ₹{Math.round(revenue.last7.revenue).toLocaleString()} vs prior ₹{Math.round(revenue.prior7.revenue).toLocaleString()} <Delta value={Math.round(revenue.wowRevenueDelta)} /></span>
-        {revenue.lastSyncedAt && <span>Shopify revenue synced {timeAgo(revenue.lastSyncedAt)}</span>}
+      <div className="mt-3 flex items-center justify-between text-[10px] text-text-muted flex-wrap gap-1">
+        <span>
+          Revenue 7d ({revenue.last7Range.start} to {revenue.last7Range.end}): ₹{Math.round(revenue.last7.revenue).toLocaleString()} vs prior (
+          {revenue.prior7Range.start} to {revenue.prior7Range.end}): ₹{Math.round(revenue.prior7.revenue).toLocaleString()} <Delta value={Math.round(revenue.wowRevenueDelta)} />
+        </span>
+        <span className="flex items-center gap-3">
+          {croSyncedAt && <span>CRO synced {timeAgo(croSyncedAt)}</span>}
+          {revenue.lastSyncedAt && <span>Shopify revenue synced {timeAgo(revenue.lastSyncedAt)}</span>}
+        </span>
       </div>
     </div>
   );

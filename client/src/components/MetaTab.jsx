@@ -1,5 +1,15 @@
 import { useState, useCallback, useMemo, Fragment } from 'react';
 import { useApi } from '../hooks/useApi';
+import SectionNav from './SectionNav';
+
+const META_SECTIONS = [
+  { id: 'meta-header-kpis', label: 'Overview' },
+  { id: 'meta-insights', label: 'Performance Insights' },
+  { id: 'meta-new-ads', label: 'New Ads Launched' },
+  { id: 'meta-focus-products', label: 'Focus Products' },
+  { id: 'meta-budget-changes', label: 'Budget Changes' },
+  { id: 'meta-all-campaigns', label: 'All Campaigns' },
+];
 
 // Must match TOTAL_MARKER in server/services/metaParser.js — Meta's CSV "Totals" row is
 // stored with this sentinel instead of a blank campaign_name/ad_name (which the DB rejects).
@@ -945,8 +955,9 @@ export default function MetaTab() {
 
   return (
     <div className="flex flex-col gap-4">
+      <SectionNav sections={META_SECTIONS} />
       {/* Header + KPIs */}
-      <div className="bg-card border border-border rounded-lg p-4">
+      <div className="bg-card border border-border rounded-lg p-4" id="meta-header-kpis">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-base font-semibold text-text-primary">Meta Ads Analysis</h2>
@@ -990,7 +1001,7 @@ export default function MetaTab() {
 
       {/* Performance insights — pick a day or the whole week, then compare worst vs best per metric */}
       {availableDays.length > 0 && (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4" id="meta-insights">
           <div className="bg-card border border-border rounded-lg p-3 flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-medium text-text-secondary mr-1">View:</span>
@@ -1041,23 +1052,23 @@ export default function MetaTab() {
 
       {/* New Ads Launched — by date */}
       {availableDays.length >= 1 && (
-        <NewAdsLaunched dayData={dayData} availableDays={availableDays} />
+        <div id="meta-new-ads"><NewAdsLaunched dayData={dayData} availableDays={availableDays} /></div>
       )}
 
       {/* Focus Products — keyword search across campaigns/ad sets/ads, with its own level strip */}
       {availableDays.length > 0 && (
-        <FocusProductsCard dayData={dayData} availableDays={availableDays} />
+        <div id="meta-focus-products"><FocusProductsCard dayData={dayData} availableDays={availableDays} /></div>
       )}
 
       {/* Budget Changes — independent Campaign/Ad Set/Ad level strip inside the component */}
       {availableDays.length > 0 && (
-        <SpendChangesTab dayData={dayData} availableDays={availableDays} />
+        <div id="meta-budget-changes"><SpendChangesTab dayData={dayData} availableDays={availableDays} /></div>
       )}
 
       {/* Campaign table — follows the same day/week selector as the insights above. Expanding
           a campaign here already drills down to its ads, so no separate level strip. */}
       {activeCampaigns.length > 0 && (
-        <div className="bg-card border border-border rounded-lg p-4">
+        <div className="bg-card border border-border rounded-lg p-4" id="meta-all-campaigns">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-base font-semibold text-text-primary">All Campaigns — {rangeLabel}</h2>
