@@ -2,7 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import {
   getCommerceSnapshot, getPagePerformance, getCroFunnelDeltas, getWebVitalsFlags, getProductInsights, getOosWithSessions,
-  getOosHistory, getLowStockTrafficWatch, getMainMovers, getRevenueLeak
+  getOosHistory, getLowStockTrafficWatch, getMainMovers, getRevenueLeak, getProductFunnel
 } from '../services/analytics.js';
 import { readRows, updateRowByKey, appendRows } from '../db/supabaseDb.js';
 import { generateAbTest } from '../services/abTests.js';
@@ -79,6 +79,16 @@ router.get('/products', async (req, res) => {
   const { limit, date } = req.query;
   try {
     res.json(await getProductInsights(limit ? parseInt(limit, 10) : 40, date || null));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/product-funnel', async (req, res) => {
+  const { start, end } = req.query;
+  if (!start || !end) return res.status(400).json({ error: 'start and end query params required' });
+  try {
+    res.json(await getProductFunnel(start, end));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

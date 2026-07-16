@@ -577,6 +577,51 @@ export async function getOosWithSessions() {
   return { alerts, oosWithSessions: result };
 }
 
+// Product-level funnel: Sessions -> ATC -> Purchase, per landing page (== per product, since we
+// only keep /products/* pages). Sessions/ATC come from page_sessions (Shopify ShopifyQL);
+// Purchase comes from gokwik_landing_pages.order_count (GoKwik's order-report CSV, mirrored from
+// the legacy sheet — see scripts/gokwik-email-appscript.js). Both tables store landing_page as
+// Shopify's landing_page_path ("/products/<handle>"), confirmed to match directly — no fuzzy
+// matching needed. There's no page-level Checkout Initiated source anywhere (GoKwik's report is
+// completed orders only), so that funnel step is intentionally omitted here.
+export async function getProductFunnel(startDate, endDate) {
+  const [pageRows, gkRows] = await Promise.all([readRows('page_sessions'), readRows('gokwik_landing_pages')]);
+
+  const byPage = new Map();
+  function get(landingPage) {
+    if (!byPage.has(landingPage)) byPage.set(landingPage, { landing_page: landingPage, sessions: 0, atc: 0, purchases: 0 });
+    return byPage.get(landingPage);
+  }
+
+  for (const r of pageRows) {
+    if (r.source_field !== 'utm_source') continue; // avoid double-counting the referrer_source breakdown
+    if (r.date < startDate || r.date > endDate) continue;
+    if (!r.landing_page || !r.landing_page.startsWith('/products/')) continue;
+    const p = get(r.landing_page);
+    p.sessions += parseInt(r.sessions, 10) || 0;
+    p.atc += parseInt(r.atc_count, 10) || 0;
+  }
+
+  for (const r of gkRows) {
+    if (r.date < startDate || r.date > endDate) continue;
+    if (!r.landing_page || !r.landing_page.startsWith('/products/')) continue;
+    const p = get(r.landing_page);
+    p.purchases += parseInt(r.order_count, 10) || 0;
+  }
+
+  const rows = [...byPage.values()]
+    .filter(p => p.sessions > 0 || p.purchases > 0)
+    .map(p => ({
+      ...p,
+      atc_rate: p.sessions > 0 ? p.atc / p.sessions : null,
+      purchase_rate_of_atc: p.atc > 0 ? p.purchases / p.atc : null,
+      cvr: p.sessions > 0 ? p.purchases / p.sessions : null,
+    }))
+    .sort((a, b) => b.sessions - a.sessions);
+
+  return { start: startDate, end: endDate, rows };
+}
+
 function daysBetween(a, b) {
   const d1 = new Date(a + 'T00:00:00Z');
   const d2 = new Date(b + 'T00:00:00Z');

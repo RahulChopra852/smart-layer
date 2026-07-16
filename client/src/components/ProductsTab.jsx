@@ -187,6 +187,85 @@ function ProductsInsightsCard({ start, end }) {
   );
 }
 
+// Sessions -> ATC -> Purchase per landing page (== per product page). No CI step: there's no
+// page-level checkout-initiated data anywhere in this system (GoKwik's report is completed
+// orders only), so it's intentionally left out rather than faked.
+function ProductFunnelCard({ start, end }) {
+  const [rangeStart, setRangeStart] = useState(start);
+  const [rangeEnd, setRangeEnd] = useState(end);
+  const [open, setOpen] = useState(false);
+  const { data, loading, error } = useApi(`/api/analytics/product-funnel?start=${rangeStart}&end=${rangeEnd}`);
+  const rows = data?.rows || [];
+
+  const subtitle = loading ? 'Loading...' : `${rows.length} product pages · Sessions → ATC → Purchase`;
+
+  return (
+    <div className="bg-card border border-border rounded-lg p-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-3 cursor-pointer select-none" onClick={() => !loading && setOpen(o => !o)}>
+          <span className="text-text-muted text-xs w-3">{open ? '▼' : '▶'}</span>
+          <div>
+            <h2 className="text-base font-semibold text-text-primary">Product Funnel</h2>
+            <p className="text-xs text-text-muted mt-0.5">{subtitle}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+          <input type="date" value={rangeStart} max={rangeEnd}
+            onChange={e => setRangeStart(e.target.value)}
+            className="bg-bg border border-border text-text-primary text-[11px] px-2 py-1 rounded-md focus:outline-none focus:border-accent" />
+          <span className="text-[10px] text-text-muted">to</span>
+          <input type="date" value={rangeEnd} min={rangeStart}
+            onChange={e => setRangeEnd(e.target.value)}
+            className="bg-bg border border-border text-text-primary text-[11px] px-2 py-1 rounded-md focus:outline-none focus:border-accent" />
+        </div>
+      </div>
+
+      {open && (
+        <div className="mt-4">
+          {loading ? (
+            <div className="flex items-center justify-center py-8 text-xs text-text-muted gap-2">
+              <div className="w-3.5 h-3.5 border-2 border-border border-t-accent rounded-full animate-spin" />Loading...
+            </div>
+          ) : error ? (
+            <p className="text-xs text-negative text-center py-8">{error}</p>
+          ) : rows.length === 0 ? (
+            <p className="text-xs text-text-muted text-center py-8">No product page data for this range</p>
+          ) : (
+            <div className="overflow-x-auto overflow-y-auto max-h-[480px]">
+              <table className="w-full">
+                <thead className="sticky top-0 z-[2] bg-card">
+                  <tr className="border-b border-border">
+                    <th className="text-left text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Landing Page</th>
+                    <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Sessions</th>
+                    <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">ATC</th>
+                    <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">ATC %</th>
+                    <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Purchases</th>
+                    <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">Purchase % of ATC</th>
+                    <th className="text-right text-[11px] font-medium text-text-muted uppercase tracking-wider py-2 px-3">CVR %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => (
+                    <tr key={i} className="border-b border-border/50 hover:bg-bg transition-colors">
+                      <td className="py-2 px-3 text-xs text-text-primary max-w-[260px] truncate" title={r.landing_page}>{r.landing_page}</td>
+                      <td className="py-2 px-3 text-xs text-right text-text-secondary">{r.sessions.toLocaleString()}</td>
+                      <td className="py-2 px-3 text-xs text-right text-text-secondary">{r.atc.toLocaleString()}</td>
+                      <td className="py-2 px-3 text-xs text-right font-medium text-text-primary">{r.atc_rate != null ? `${(r.atc_rate * 100).toFixed(1)}%` : '—'}</td>
+                      <td className="py-2 px-3 text-xs text-right text-text-secondary">{r.purchases.toLocaleString()}</td>
+                      <td className="py-2 px-3 text-xs text-right font-medium text-text-primary">{r.purchase_rate_of_atc != null ? `${(r.purchase_rate_of_atc * 100).toFixed(1)}%` : '—'}</td>
+                      <td className="py-2 px-3 text-xs text-right font-semibold text-accent">{r.cvr != null ? `${(r.cvr * 100).toFixed(2)}%` : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LowStockCard() {
   const { data, loading, error } = useApi('/api/analytics/low-stock');
   const alerts = data?.alerts || [];
@@ -726,6 +805,7 @@ function LowStockWatchCard() {
 const SECTIONS = [
   { id: 'products-low-stock-watch', label: 'Low Stock Watch' },
   { id: 'products-insights', label: 'Products Insights' },
+  { id: 'products-funnel', label: 'Product Funnel' },
   { id: 'products-focus-product', label: 'Focus Product' },
   { id: 'products-low-stock', label: 'Low Stock' },
   { id: 'products-oos-sessions', label: 'Sessions Lost While OOS' },
@@ -738,6 +818,7 @@ export default function ProductsTab({ start, end }) {
       <SectionNav sections={SECTIONS} />
       <div id="products-low-stock-watch"><LowStockWatchCard /></div>
       <div id="products-insights"><ProductsInsightsCard start={start} end={end} /></div>
+      <div id="products-funnel"><ProductFunnelCard start={start} end={end} /></div>
       <div id="products-focus-product"><FocusProductCard /></div>
       <div id="products-low-stock"><LowStockCard /></div>
       <div id="products-oos-sessions"><OosSessionsCard /></div>
