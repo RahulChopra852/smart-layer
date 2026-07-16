@@ -88,7 +88,7 @@ export default function MainMovers({ end }) {
           <h3 className="text-xs font-semibold text-text-primary mb-2">Sessions &amp; Sales — current vs prior period</h3>
           {data.salesRange.end !== data.currRange.end && (
             <p className="text-[11px] text-text-muted mb-2">
-              Revenue/Units Sold reflect {data.salesRange.start} to {data.salesRange.end} — Shopify's nightly sync hasn't posted {data.currRange.end} yet.
+              Revenue/Units Sold reflect {data.salesRange.start} to {data.salesRange.end} — Shopify's 2-hourly sync hasn't posted {data.currRange.end} yet.
             </p>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">

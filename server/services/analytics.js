@@ -28,12 +28,18 @@ export async function getCommerceSnapshot() {
 
   const ordersFor = (date) => {
     const r = croWebByDate.get(date);
+    const sessions = parseFloat(r?.sessions) || 0;
+    let atc = parseFloat(r?.atc) || 0;
+    const atcPct = parseFloat(r?.atc_pct);
+    // Same raw-sheet quirk fixed in getCroFunnelDeltas below (e.g. 805800 instead of ~8058) —
+    // recompute from the percentage column whenever the raw count exceeds total sessions.
+    if (sessions > 0 && !isNaN(atcPct) && atc > sessions) atc = Math.round(sessions * atcPct / 100);
     return {
       total: parseInt(r?.orders, 10) || 0,
       web: parseInt(r?.web_orders, 10) || 0,
       app: parseInt(r?.app_orders, 10) || 0,
-      sessions: parseFloat(r?.sessions) || 0,
-      atc: parseFloat(r?.atc) || 0,
+      sessions,
+      atc,
     };
   };
   const revenueFor = (date) => {
@@ -87,7 +93,23 @@ export async function getCommerceSnapshot() {
   const last7Cvr = cvrFor(ordersLast7);
   const prior7Cvr = cvrFor(ordersPrior7);
 
+  // 8-point trailing series for the one-line sparkline cards. Orders/ATC/Sessions end today
+  // (live, cheap); revenue ends yesterday (last complete Shopify day) for the same reason the
+  // rest of the revenue block does.
+  const ordersTrendDates = Array.from({ length: 8 }, (_, i) => dateDaysAgo(7 - i));
+  const revenueTrendDates = Array.from({ length: 8 }, (_, i) => dateDaysAgo(8 - i));
+  const sessionsTrend = ordersTrendDates.map(d => ordersFor(d).sessions);
+  const atcTrend = ordersTrendDates.map(d => ordersFor(d).atc);
+  const ordersTrend = ordersTrendDates.map(d => ordersFor(d).total);
+  const revenueTrend = revenueTrendDates.map(d => revenueFor(d).revenue);
+
   return {
+    sessions: {
+      today: { date: today, value: todayOrders.sessions },
+      yesterday: { date: yesterday, value: yesterdayOrders.sessions },
+      dodDelta: todayOrders.sessions - yesterdayOrders.sessions,
+      trend: sessionsTrend,
+    },
     orders: {
       today: { date: today, ...todayOrders },
       yesterday: { date: yesterday, ...yesterdayOrders },
@@ -95,6 +117,7 @@ export async function getCommerceSnapshot() {
       last7: { ...ordersLast7 },
       prior7: { ...ordersPrior7 },
       wowDelta: ordersLast7.total - ordersPrior7.total,
+      trend: ordersTrend,
     },
     atc: {
       today: { date: today, value: todayOrders.atc },
@@ -102,6 +125,7 @@ export async function getCommerceSnapshot() {
       prior7: { value: ordersPrior7.atc },
       dodDelta: todayOrders.atc - yesterdayOrders.atc,
       wowDelta: ordersLast7.atc - ordersPrior7.atc,
+      trend: atcTrend,
     },
     cvr: {
       today: { date: today, value: todayCvr },
@@ -123,6 +147,7 @@ export async function getCommerceSnapshot() {
       wowUnitsDelta: revenueLast7.units - revenuePrior7.units,
       wowRevenueDelta: revenueLast7.revenue - revenuePrior7.revenue,
       lastSyncedAt: shopifyOrdersSyncedAt,
+      trend: revenueTrend,
     },
     croSyncedAt: croWebSyncedAt,
   };
@@ -658,4 +683,82 @@ export async function getLowStockTrafficWatch() {
   }).sort((a, b) => a.total_inventory - b.total_inventory);
 
   return { watchlist: result };
+}
+
+// Revenue Leak — four distinct "money left on the table" signals surfaced together on the CRO
+// tab: sessions landing on OOS products (live, reuses getOosWithSessions), CI-to-purchase drop
+// (live, from cro_daily), and two manually-uploaded CSV sources (discount failures, abandoned
+// carts) that show whatever was most recently uploaded rather than strictly "today", since
+// neither is synced automatically yet.
+export async function getRevenueLeak() {
+  const [oosData, croRows, discountRows, cartRows] = await Promise.all([
+    getOosWithSessions(),
+    readRows('cro_daily'),
+    readRows('discount_failures'),
+    readRows('abandoned_carts'),
+  ]);
+
+  const oosSessionsTotal = oosData.oosWithSessions.reduce((s, p) => s + p.sessions_during_oos, 0);
+
+  const ciToPurchase = (r) => {
+    if (!r) return null;
+    const sessions = parseFloat(r.sessions) || 0;
+    const icPct = parseFloat(r.ic_pct);
+    let ic = parseInt(r.ic, 10) || 0;
+    // Same raw-sheet quirk fixed for ATC in getCroFunnelDeltas (e.g. 362100 instead of ~3618) —
+    // recompute from the percentage column whenever the raw count exceeds total sessions.
+    if (sessions > 0 && !isNaN(icPct) && ic > sessions) ic = Math.round(sessions * icPct / 100);
+    const orders = parseInt(r.orders, 10) || 0;
+    const dropped = Math.max(0, ic - orders);
+    return { date: r.date, ic, orders, dropped, dropPct: ic > 0 ? (dropped / ic) * 100 : null };
+  };
+  const today = todayIso();
+  const yesterday = dateDaysAgo(1);
+  const webToday = croRows.find(r => r.channel === 'web' && r.date === today);
+  const webYesterday = croRows.find(r => r.channel === 'web' && r.date === yesterday);
+
+  const discountDates = [...new Set(discountRows.map(r => r.date))].sort();
+  const latestDiscountDate = discountDates[discountDates.length - 1] || null;
+  const latestDiscountRows = discountRows.filter(r => r.date === latestDiscountDate);
+  const reasonTotals = {};
+  for (const r of latestDiscountRows) {
+    reasonTotals[r.failure_reason] = (reasonTotals[r.failure_reason] || 0) + (parseInt(r.total_failed_attempts, 10) || 0);
+  }
+
+  const cartsByDate = {};
+  for (const r of cartRows) {
+    const d = (r.created_at || '').slice(0, 10);
+    if (!d) continue;
+    if (!cartsByDate[d]) cartsByDate[d] = { count: 0, value: 0 };
+    cartsByDate[d].count += 1;
+    cartsByDate[d].value += parseFloat(r.amount) || 0;
+  }
+  const cartDates = Object.keys(cartsByDate).sort();
+  const latestCartDate = cartDates[cartDates.length - 1] || null;
+  const dropStageTotals = {};
+  for (const r of cartRows) {
+    if ((r.created_at || '').slice(0, 10) !== latestCartDate) continue;
+    const stage = r.drop_stage || 'Unknown';
+    dropStageTotals[stage] = (dropStageTotals[stage] || 0) + 1;
+  }
+
+  return {
+    oosSessions: {
+      total: oosSessionsTotal,
+      topProducts: oosData.oosWithSessions.slice(0, 5).map(p => ({ product_title: p.product_title, sessions: p.sessions_during_oos })),
+    },
+    ciToPurchase: { today: ciToPurchase(webToday), yesterday: ciToPurchase(webYesterday) },
+    discountFailures: {
+      date: latestDiscountDate,
+      totalFailedAttempts: latestDiscountRows.reduce((s, r) => s + (parseInt(r.total_failed_attempts, 10) || 0), 0),
+      totalUniqueUsers: latestDiscountRows.reduce((s, r) => s + (parseInt(r.total_unique_users, 10) || 0), 0),
+      topReasons: Object.entries(reasonTotals).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([reason, count]) => ({ reason, count })),
+    },
+    abandonedCarts: {
+      date: latestCartDate,
+      count: latestCartDate ? cartsByDate[latestCartDate].count : 0,
+      value: latestCartDate ? cartsByDate[latestCartDate].value : 0,
+      topDropStages: Object.entries(dropStageTotals).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([stage, count]) => ({ stage, count })),
+    },
+  };
 }

@@ -4,12 +4,14 @@ import PagePerformance from './PagePerformance';
 import DayTrend from './DayTrend';
 import RcaSnapshot, { useRcaProblems } from './RcaSnapshot';
 import CommerceSnapshot from './CommerceSnapshot';
+import RevenueLeak from './RevenueLeak';
 import MainMovers from './MainMovers';
 import SectionNav from './SectionNav';
 import { useApi } from '../hooks/useApi';
 
 const SECTIONS = [
   { id: 'cro-commerce-snapshot', label: 'Commerce Snapshot' },
+  { id: 'cro-revenue-leak', label: 'Revenue Leak' },
   { id: 'cro-todays-rca', label: "Today's RCA" },
   { id: 'cro-main-movers', label: 'Main Movers' },
   { id: 'cro-day-trend', label: 'Day Trend' },
@@ -363,6 +365,7 @@ export default function CroDashboard({ start, end }) {
         <CroSyncBar onSynced={() => setRefreshKey(k => k + 1)} />
       </div>
       <div id="cro-commerce-snapshot"><CommerceSnapshot key={`commerce-${refreshKey}`} /></div>
+      <div id="cro-revenue-leak"><RevenueLeak key={`revenue-leak-${refreshKey}`} /></div>
       <div id="cro-todays-rca"><RcaSnapshot key={`rca-${refreshKey}`} /></div>
       <div id="cro-main-movers"><MainMovers end={end} key={`movers-${refreshKey}`} /></div>
       <div id="cro-day-trend"><DayTrend key={`daytrend-${refreshKey}`} /></div>

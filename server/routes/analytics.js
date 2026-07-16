@@ -1,16 +1,19 @@
 import express from 'express';
+import multer from 'multer';
 import {
   getCommerceSnapshot, getPagePerformance, getCroFunnelDeltas, getWebVitalsFlags, getProductInsights, getOosWithSessions,
-  getOosHistory, getLowStockTrafficWatch, getMainMovers
+  getOosHistory, getLowStockTrafficWatch, getMainMovers, getRevenueLeak
 } from '../services/analytics.js';
-import { readRows, updateRowByKey } from '../db/supabaseDb.js';
+import { readRows, updateRowByKey, appendRows } from '../db/supabaseDb.js';
 import { generateAbTest } from '../services/abTests.js';
 import { fetchAnomalies, fetchDailyVisitors } from '../services/croSheets.js';
 import { getAppOverview, getWebOverview, getProductPageInsights } from '../services/ga.js';
 import { fetchLowStockAlerts, fetchHourlyOrders } from '../services/shopify.js';
 import { createSdlcTask, taskExists } from '../services/sdlcMcp.js';
+import { parseDiscountFailures, parseAbandonedCarts } from '../services/revenueLeakParsers.js';
 
 const router = express.Router();
+const upload = multer({ storage: multer.memoryStorage() });
 
 router.get('/commerce-snapshot', async (req, res) => {
   try {
@@ -539,6 +542,41 @@ router.get('/low-stock-watch', async (req, res) => {
     res.json(await getLowStockTrafficWatch());
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/revenue-leak', async (req, res) => {
+  try {
+    res.json(await getRevenueLeak());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/analytics/revenue-leak/discount-failures — multipart form, field name "file".
+// Accepts the pre-aggregated discount-failures CSV export (one row per date+channel+code+reason).
+router.post('/revenue-leak/discount-failures', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded — expected multipart field "file"' });
+  try {
+    const rows = parseDiscountFailures(req.file.buffer);
+    await appendRows('discount_failures', rows);
+    res.json({ uploaded: true, rowCount: rows.length });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/analytics/revenue-leak/abandoned-carts — multipart form, field name "file".
+// Accepts GoKwik's row-level abandoned cart report; a Google Apps Script pulling this
+// automatically from the 8:30am daily Gmail report is planned but not built yet.
+router.post('/revenue-leak/abandoned-carts', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded — expected multipart field "file"' });
+  try {
+    const rows = parseAbandonedCarts(req.file.buffer);
+    await appendRows('abandoned_carts', rows);
+    res.json({ uploaded: true, rowCount: rows.length });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 

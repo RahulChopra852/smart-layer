@@ -12,6 +12,14 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// ga_app_daily itself intentionally stores dates as GA4's raw YYYYMMDD (other code, e.g.
+// getCroFunnelDeltas, slices it apart directly) — but _sync_state.last_synced_date needs a
+// real "YYYY-MM-DD" string since it gets fed straight into `new Date(...)`. Normalizes either
+// format to dashed; a no-op if it's already dashed.
+function toDashedDate(d) {
+  return /^\d{8}$/.test(d) ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}` : d;
+}
+
 async function syncShopifyOrders() {
   const state = await getSyncState('shopify_orders');
   const since = state?.last_synced_date || DEFAULT_START_DATE;
@@ -116,7 +124,7 @@ async function syncGaApp() {
   const state = await getSyncState('ga_app');
   // "since" means "already covered through this date" (the code below starts from since+1) —
   // the default must be the day BEFORE the desired first day, or that first day gets skipped.
-  const since = state?.last_synced_date || '2025-12-31';
+  const since = toDashedDate(state?.last_synced_date || '2025-12-31');
   const today = todayIso();
 
   const nextDay = new Date(since);
@@ -143,7 +151,7 @@ async function syncGaApp() {
   const written = await appendRows('ga_app_daily', rows);
 
   const latestDate = daily.map(r => r.date).sort().slice(-1)[0];
-  if (latestDate) await setSyncState('ga_app', latestDate);
+  if (latestDate) await setSyncState('ga_app', toDashedDate(latestDate));
 
   return { source: 'ga_app', rowsAdded: written.length, since };
 }
@@ -152,6 +160,10 @@ async function syncGaApp() {
 // the Google Sheet — this just mirrors those tabs into Supabase so they're queryable there too.
 async function syncSheetMirror() {
   const results = await mirrorAllSheetTabs();
+  // No watermark needed for the full-table re-upsert itself (see mirrorAllSheetTabs), but the
+  // GoKwik/Google Ads/PSI tabs still need *some* recorded timestamp so their tab-wise sync
+  // status isn't permanently blank.
+  await setSyncState('sheet_mirror', new Date().toISOString().slice(0, 10));
   return { source: 'sheet_mirror', tabs: results };
 }
 

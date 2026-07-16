@@ -48,6 +48,12 @@ export const TAB_SCHEMAS = {
   gokwik_landing_pages: ['date', 'landing_page', 'order_count', 'top_utm_source'],
   oos_log: ['product_id', 'product_title', 'handle', 'sku', 'oos_since', 'restocked_at', 'status'],
   ab_tests: ['id', 'metric', 'area', 'name', 'hypothesis', 'impact', 'status', 'source', 'page_url', 'created_at', 'ticket_code'],
+  discount_failures: ['date', 'sales_channel', 'coupon_code', 'failure_reason', 'total_failed_attempts', 'total_unique_users'],
+  abandoned_carts: [
+    'cart_id', 'created_at', 'updated_at', 'customer_name', 'phone_number', 'email',
+    'amount', 'discount_total', 'mrp_total', 'drop_stage', 'drop_off_reasons',
+    'utm_source', 'utm_campaign', 'utm_medium', 'discount_code', 'landing_page', 'store_platform', 'risk_flag'
+  ],
   _sync_state: ['source', 'last_synced_date', 'last_synced_at']
 };
 
@@ -73,6 +79,8 @@ const UPSERT_KEYS = {
   gokwik_landing_pages: ['date', 'landing_page'],
   oos_log: ['product_id'],
   ab_tests: [],
+  discount_failures: ['date', 'sales_channel', 'coupon_code', 'failure_reason'],
+  abandoned_carts: ['cart_id'],
   _sync_state: ['source']
 };
 

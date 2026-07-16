@@ -14,21 +14,7 @@ import SummaryTab from './components/SummaryTab';
 import SyncStatus from './components/SyncStatus';
 import HomePage from './components/HomePage';
 import ChatWidget from './components/ChatWidget';
-
-const TABS = [
-  { id: 'summary', label: 'Summary' },
-  { id: 'cro', label: 'CRO' },
-  { id: 'gokwik', label: 'GoKwik' },
-  { id: 'ga-app', label: 'GA - App' },
-  { id: 'ga-web', label: 'GA - Web' },
-  { id: 'vitals', label: 'Web Vitals' },
-  { id: 'products', label: 'Products' },
-  { id: 'google-ads', label: 'Google Ads' },
-  { id: 'meta', label: 'Meta Ads' },
-  { id: 'anomalies', label: 'Anomalies' },
-  { id: 'abtests', label: 'AB Tests' },
-  { id: 'vwo', label: 'VWO' },
-];
+import { TABS } from './tabs';
 
 function getDefaultDates() {
   const end = new Date().toISOString().slice(0, 10);

@@ -2,15 +2,23 @@ import { useApi } from '../hooks/useApi';
 
 const fmt = (v) => v == null ? '—' : v.toLocaleString();
 const fmtCur = (v) => v == null ? '—' : `₹${Math.round(v).toLocaleString()}`;
+const fmtCurShort = (v) => {
+  if (v == null) return '—';
+  if (Math.abs(v) >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
+  if (Math.abs(v) >= 1000) return `₹${(v / 1000).toFixed(1)}K`;
+  return `₹${Math.round(v).toLocaleString()}`;
+};
 
-function Delta({ value }) {
-  if (value == null || value === 0) return null;
-  const positive = value > 0;
-  return (
-    <span className={`text-[11px] font-medium ml-1.5 ${positive ? 'text-positive' : 'text-negative'}`}>
-      {positive ? '+' : ''}{fmt(value)}
-    </span>
-  );
+// % change (not absolute delta) to match the at-a-glance Shopify-style cards this was modeled
+// on — "today" is a live/partial day, so a raw count delta is less meaningful than the trend.
+function pctDelta(curr, prev) {
+  if (curr == null || prev == null || prev === 0) return null;
+  return ((curr - prev) / prev) * 100;
+}
+function fmtPctDelta(v) {
+  if (v == null) return null;
+  const s = Math.abs(v).toFixed(1).replace(/\.0$/, '');
+  return `${v > 0 ? '+' : v < 0 ? '-' : ''}${s}%`;
 }
 
 function timeAgo(iso) {
@@ -20,6 +28,41 @@ function timeAgo(iso) {
   const hours = Math.round(mins / 60);
   if (hours < 24) return `${hours}h ago`;
   return `${Math.round(hours / 24)}d ago`;
+}
+
+// Small inline trend line, same idea as Shopify's own metric cards — rises/falls with the raw
+// trailing values, colored by whether the period-over-period change is up or down.
+function MiniSparkline({ points, positive }) {
+  if (!points || points.filter(p => p != null).length < 2) return null;
+  const w = 56, h = 22, pad = 2;
+  const vals = points.map(p => p ?? 0);
+  const max = Math.max(...vals), min = Math.min(...vals);
+  const range = max - min || 1;
+  const stepX = (w - pad * 2) / (vals.length - 1);
+  const path = vals
+    .map((v, i) => `${i === 0 ? 'M' : 'L'} ${(pad + i * stepX).toFixed(1)} ${(h - pad - ((v - min) / range) * (h - pad * 2)).toFixed(1)}`)
+    .join(' ');
+  const color = positive == null ? '#94A3B8' : positive ? '#10B981' : '#EF4444';
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h}>
+      <path d={path} fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function MetricCard({ label, value, delta, trend }) {
+  const positive = delta == null ? null : delta > 0;
+  const deltaColor = positive == null ? 'text-text-muted' : positive ? 'text-positive' : 'text-negative';
+  return (
+    <div className="flex-1 min-w-[140px] flex flex-col items-center text-center gap-1.5 px-3 py-2">
+      <div className="text-xs text-text-muted">{label}</div>
+      <div className="flex items-center gap-3">
+        <div className="text-xl font-bold text-text-primary">{value}</div>
+        <MiniSparkline points={trend} positive={positive} />
+        {delta != null && <span className={`text-xs font-medium ${deltaColor}`}>{fmtPctDelta(delta)}</span>}
+      </div>
+    </div>
+  );
 }
 
 export default function CommerceSnapshot() {
@@ -36,55 +79,50 @@ export default function CommerceSnapshot() {
   if (error) return <div className="bg-card border border-border rounded-lg p-4"><p className="text-xs text-negative">{error}</p></div>;
   if (!data) return null;
 
-  const { orders, atc, cvr, revenue, croSyncedAt } = data;
-  const fmtPct = (v) => v == null ? '—' : `${v.toFixed(2)}%`;
+  const { sessions, orders, atc, revenue, croSyncedAt } = data;
 
   return (
     <div className="bg-card border border-border rounded-lg p-4">
       <div className="flex items-center justify-between mb-3">
         <div>
           <h2 className="text-base font-semibold text-text-primary">Commerce Snapshot</h2>
-          <p className="text-xs text-text-muted mt-0.5">Orders/ATC/CVR%: live from CRO sheet (every 2 min) · Revenue/Units: Shopify, once nightly at 12:15am</p>
+          <p className="text-xs text-text-muted mt-0.5">
+            Sessions/ATC/Orders compared to yesterday · Revenue: Shopify, synced every 2h
+          </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <div className="bg-bg rounded-md p-3 border border-border/50">
-          <div className="text-[10px] text-text-muted uppercase">Orders Today (live) — {orders.today.date}</div>
-          <div className="text-xl font-bold text-accent">{fmt(orders.today.total)}<Delta value={orders.dodDelta} /></div>
-          <div className="text-[10px] text-text-muted mt-0.5">Web {fmt(orders.today.web)} · App {fmt(orders.today.app)}</div>
-        </div>
-        <div className="bg-bg rounded-md p-3 border border-border/50">
-          <div className="text-[10px] text-text-muted uppercase">ATC Today (live) — {atc.today.date}</div>
-          <div className="text-xl font-bold text-accent">{fmt(atc.today.value)}<Delta value={atc.dodDelta} /></div>
-          <div className="text-[10px] text-text-muted mt-0.5">7d: {fmt(atc.last7.value)} · Prior 7d: {fmt(atc.prior7.value)}</div>
-        </div>
-        <div className="bg-bg rounded-md p-3 border border-border/50">
-          <div className="text-[10px] text-text-muted uppercase">CVR% Today (live) — {cvr.today.date}</div>
-          <div className="text-xl font-bold text-accent">{fmtPct(cvr.today.value)}<Delta value={cvr.dodDelta} /></div>
-          <div className="text-[10px] text-text-muted mt-0.5">Yesterday ({cvr.yesterday.date}): {fmtPct(cvr.yesterday.value)}</div>
-        </div>
-        <div className="bg-bg rounded-md p-3 border border-border/50">
-          <div className="text-[10px] text-text-muted uppercase">Orders: 7d vs Prior 7d</div>
-          <div className="text-xl font-bold text-text-primary">{fmt(orders.last7.total)}<Delta value={orders.wowDelta} /></div>
-          <div className="text-[10px] text-text-muted mt-0.5">Prior: {fmt(orders.prior7.total)}</div>
-        </div>
-        <div className="bg-bg rounded-md p-3 border border-border/50">
-          <div className="text-[10px] text-text-muted uppercase">Units — Yesterday ({revenue.yesterday.date})</div>
-          <div className="text-xl font-bold text-text-primary">{fmt(revenue.yesterday.units)}<Delta value={revenue.dodUnitsDelta} /></div>
-          <div className="text-[10px] text-text-muted mt-0.5">Day before ({revenue.dayBefore.date}): {fmt(revenue.dayBefore.units)}</div>
-        </div>
-        <div className="bg-bg rounded-md p-3 border border-border/50">
-          <div className="text-[10px] text-text-muted uppercase">Revenue — Yesterday ({revenue.yesterday.date})</div>
-          <div className="text-xl font-bold text-positive">{fmtCur(revenue.yesterday.revenue)}<Delta value={revenue.dodRevenueDelta} /></div>
-          <div className="text-[10px] text-text-muted mt-0.5">Day before ({revenue.dayBefore.date}): {fmtCur(revenue.dayBefore.revenue)}</div>
-        </div>
+      <div className="flex items-stretch divide-x divide-border/50 border border-border/50 rounded-md bg-bg">
+        <MetricCard
+          label="Sessions"
+          value={fmt(sessions.today.value)}
+          delta={pctDelta(sessions.today.value, sessions.yesterday.value)}
+          trend={sessions.trend}
+        />
+        <MetricCard
+          label="ATC"
+          value={fmt(atc.today.value)}
+          delta={pctDelta(atc.today.value, orders.yesterday.atc)}
+          trend={atc.trend}
+        />
+        <MetricCard
+          label="Orders"
+          value={fmt(orders.today.total)}
+          delta={pctDelta(orders.today.total, orders.yesterday.total)}
+          trend={orders.trend}
+        />
+        <MetricCard
+          label="Revenue"
+          value={fmtCurShort(revenue.yesterday.revenue)}
+          delta={pctDelta(revenue.yesterday.revenue, revenue.dayBefore.revenue)}
+          trend={revenue.trend}
+        />
       </div>
 
-      <div className="mt-3 flex items-center justify-between text-[10px] text-text-muted flex-wrap gap-1">
+      <div className="mt-2 flex items-center justify-between text-[10px] text-text-muted flex-wrap gap-1">
         <span>
-          Revenue 7d ({revenue.last7Range.start} to {revenue.last7Range.end}): ₹{Math.round(revenue.last7.revenue).toLocaleString()} vs prior (
-          {revenue.prior7Range.start} to {revenue.prior7Range.end}): ₹{Math.round(revenue.prior7.revenue).toLocaleString()} <Delta value={Math.round(revenue.wowRevenueDelta)} />
+          Orders {orders.today.date}: Web {fmt(orders.today.web)} · App {fmt(orders.today.app)}
+          {' · '}Revenue as of {revenue.yesterday.date} ({fmtCur(revenue.yesterday.revenue)}, {fmt(revenue.yesterday.units)} units) — showing yesterday's complete total; today's is still partial
         </span>
         <span className="flex items-center gap-3">
           {croSyncedAt && <span>CRO synced {timeAgo(croSyncedAt)}</span>}
