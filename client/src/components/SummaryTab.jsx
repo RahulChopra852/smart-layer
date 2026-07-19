@@ -423,7 +423,7 @@ export default function SummaryTab({ onNavigate }) {
       ],
     },
     {
-      title: 'Anomalies', tabId: 'anomalies',
+      title: 'Anomalies', tabId: 'cro',
       status: anomalies.length > 3 ? 'warning' : 'good',
       lastDate: anomalies[0]?.date,
       attention: anomalies.length > 3 ? `${anomalies.length} anomalies flagged across the funnel` : null,

@@ -7,7 +7,6 @@ const TAB_CONFIG = [
   { id: 'vitals', label: 'Web Vitals', icon: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z', desc: 'Core web vitals', color: '#F59E0B' },
   { id: 'products', label: 'Products', icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4', desc: 'Product insights', color: '#EC4899' },
   { id: 'meta', label: 'Meta Ads', icon: 'M12 2a10 10 0 100 20 10 10 0 000-20zm0 4a2 2 0 110 4 2 2 0 010-4zm0 14c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z', desc: 'Campaign reports', color: '#8B5CF6' },
-  { id: 'anomalies', label: 'Anomalies', icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-1.333-2.694-1.333-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z', desc: 'Unexplained movements', color: '#EF4444' },
   { id: 'abtests', label: 'AB Tests', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2', desc: 'Experiment results', color: '#14B8A6' },
   { id: 'vwo', label: 'VWO', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', desc: 'VWO campaigns', color: '#F97316' },
 ];

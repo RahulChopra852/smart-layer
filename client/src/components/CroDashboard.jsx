@@ -6,8 +6,10 @@ import RcaSnapshot, { useRcaProblems } from './RcaSnapshot';
 import CommerceSnapshot from './CommerceSnapshot';
 import RevenueLeak from './RevenueLeak';
 import MainMovers from './MainMovers';
+import SessionAnomalies from './SessionAnomalies';
 import SectionNav from './SectionNav';
 import { useApi } from '../hooks/useApi';
+import { SingleDatePicker } from './DateRangePicker';
 
 const SECTIONS = [
   { id: 'cro-commerce-snapshot', label: 'Commerce Snapshot' },
@@ -18,6 +20,7 @@ const SECTIONS = [
   { id: 'cro-funnel', label: 'CRO Funnel' },
   { id: 'cro-weekly-funnel', label: 'Weekly Funnel' },
   { id: 'cro-page-performance', label: 'Top / Worst Pages' },
+  { id: 'cro-anomalies', label: 'Session Anomalies' },
 ];
 
 function fmt(n) { return n != null ? n.toLocaleString() : '—'; }
@@ -89,8 +92,7 @@ function FunnelDateSync({ onSynced }) {
       </button>
       {open && (
         <div className="flex items-center gap-1.5 bg-bg border border-border rounded px-2 py-1">
-          <input type="date" value={syncDate} onChange={e => setSyncDate(e.target.value)}
-            className="bg-card border border-border text-text-primary text-[10px] px-1.5 py-0.5 rounded focus:outline-none focus:border-accent" />
+          <SingleDatePicker value={syncDate} onChange={setSyncDate} compact />
           <label className="flex items-center gap-0.5 text-[10px] text-text-secondary cursor-pointer">
             <input type="checkbox" checked={channels.web} onChange={e => setChannels(c => ({ ...c, web: e.target.checked }))} /> Web
           </label>
@@ -307,8 +309,7 @@ function CroSyncBar({ onSynced }) {
       </div>
       {showDateSync && (
         <div className="flex items-center gap-2 bg-bg border border-border rounded-md px-3 py-2">
-          <input type="date" value={syncDate} onChange={e => setSyncDate(e.target.value)}
-            className="bg-card border border-border text-text-primary text-xs px-2 py-1 rounded focus:outline-none focus:border-accent" />
+          <SingleDatePicker value={syncDate} onChange={setSyncDate} />
           <label className="flex items-center gap-1 text-xs text-text-secondary cursor-pointer">
             <input type="checkbox" checked={syncChannels.web} onChange={e => setSyncChannels(c => ({ ...c, web: e.target.checked }))} className="rounded" />
             Web
@@ -375,6 +376,7 @@ export default function CroDashboard({ start, end }) {
         <PagePerformance start={start} end={end} mode="top" />
         <PagePerformance start={start} end={end} mode="worst" />
       </div>
+      <div id="cro-anomalies"><SessionAnomalies start={start} key={`anomalies-${refreshKey}`} /></div>
     </div>
   );
 }

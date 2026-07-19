@@ -10,7 +10,6 @@ export const TABS = [
   { id: 'products', label: 'Products' },
   { id: 'google-ads', label: 'Google Ads' },
   { id: 'meta', label: 'Meta Ads' },
-  { id: 'anomalies', label: 'Anomalies' },
   { id: 'abtests', label: 'AB Tests' },
   { id: 'vwo', label: 'VWO' },
 ];

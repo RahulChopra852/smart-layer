@@ -2,7 +2,6 @@ import { useState, useCallback } from 'react';
 import CroDashboard from './components/CroDashboard';
 import WebVitalsTab from './components/WebVitalsTab';
 import ProductsTab from './components/ProductsTab';
-import AnomaliesTab from './components/AnomaliesTab';
 import AbTestsTab from './components/AbTestsTab';
 import VwoTab from './components/VwoTab';
 import MetaTab from './components/MetaTab';
@@ -12,6 +11,7 @@ import GokwikTab from './components/GokwikTab';
 import GoogleAdsTab from './components/GoogleAdsTab';
 import SummaryTab from './components/SummaryTab';
 import SyncStatus from './components/SyncStatus';
+import DateRangePicker from './components/DateRangePicker';
 import HomePage from './components/HomePage';
 import ChatWidget from './components/ChatWidget';
 import { TABS } from './tabs';
@@ -57,13 +57,7 @@ export default function App() {
             <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-positive/15 text-positive uppercase tracking-wide">Live</span>
           </div>
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <input type="date" value={start} onChange={e => setStart(e.target.value)}
-                className="bg-bg border border-border text-text-primary text-xs px-2.5 py-1.5 rounded-md focus:outline-none focus:border-accent" />
-              <span className="text-xs text-text-muted">to</span>
-              <input type="date" value={end} onChange={e => setEnd(e.target.value)}
-                className="bg-bg border border-border text-text-primary text-xs px-2.5 py-1.5 rounded-md focus:outline-none focus:border-accent" />
-            </div>
+            <DateRangePicker start={start} end={end} onChange={({ start: s, end: e }) => { setStart(s); setEnd(e); }} />
             <SyncStatus onSyncComplete={handleSyncComplete} />
           </div>
         </div>
@@ -91,7 +85,6 @@ export default function App() {
         {tab === 'products' && <ProductsTab start={start} end={end} />}
         {tab === 'google-ads' && <GoogleAdsTab />}
         {tab === 'meta' && <MetaTab />}
-        {tab === 'anomalies' && <AnomaliesTab start={start} />}
         {tab === 'abtests' && <AbTestsTab start={start} end={end} />}
         {tab === 'vwo' && <VwoTab />}
         {tab === 'gokwik' && <GokwikTab />}
