@@ -70,6 +70,7 @@ export function parseMetaReport(fileBuffer) {
     // which is exactly "no budget of its own at this level" for the Budget Changes tab.
     toNumOrNull(col(r, 'Ad set budget')),
     toNumOrNull(col(r, 'Campaign budget')),
+    toNumOrNull(col(r, 'Frequency')),
   ];
 
   const accountTotalRow = records[0]['Campaign name'] || col(records[0], 'Campaign name') ? null : toRow(records[0]);

@@ -14,7 +14,7 @@ export const TAB_SCHEMAS = {
     'lc_to_lpv', 'lpv_to_a2c', 'a2c_to_ci', 'a2c_to_order', 'ci_to_order',
     'website_checkouts', 'website_purchases', 'roas', 'cvr_pct',
     'lpv', 'link_clicks', 'hook_rate', 'cost_per_purchase_new_customer',
-    'ad_set_budget', 'campaign_budget'
+    'ad_set_budget', 'campaign_budget', 'frequency'
   ],
   rca_notes: ['id', 'date', 'source', 'metric_tag', 'note', 'created_at'],
   vwo_campaigns: ['id', 'name', 'status', 'started', 'goal', 'type', 'visitors', 'control_conv', 'control_visitors', 'control_rate', 'control_rpv', 'var_conv', 'var_visitors', 'var_rate', 'var_rpv', 'improvement', 'confidence', 'variations', 'synced_at'],

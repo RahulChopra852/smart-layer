@@ -5,9 +5,10 @@ import SectionNav from './SectionNav';
 const META_SECTIONS = [
   { id: 'meta-header-kpis', label: 'Overview' },
   { id: 'meta-insights', label: 'Performance Insights' },
-  { id: 'meta-new-ads', label: 'New Ads Launched' },
   { id: 'meta-focus-products', label: 'Focus Products' },
   { id: 'meta-budget-changes', label: 'Budget Changes' },
+  { id: 'meta-budget-leak', label: 'Budget Leak Detector' },
+  { id: 'meta-new-ads', label: 'New Ads Launched' },
   { id: 'meta-all-campaigns', label: 'All Campaigns' },
 ];
 
@@ -17,8 +18,8 @@ const TOTAL_MARKER = '(account total)';
 
 const pf = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n; };
 const x100 = (v) => { const n = pf(v); return n != null ? n * 100 : null; };
-function fmt(n) { if (n == null || isNaN(n)) return '—'; return n.toLocaleString(undefined, { maximumFractionDigits: 2 }); }
-function inr(n) { if (n == null || isNaN(n)) return '—'; return `₹${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`; }
+function fmt(n) { if (n == null || isNaN(n)) return '—'; return n.toLocaleString('en-IN', { maximumFractionDigits: 2 }); }
+function inr(n) { if (n == null || isNaN(n)) return '—'; return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`; }
 function pctD(n) { if (n == null || isNaN(n)) return '—'; return `${n.toFixed(2)}%`; }
 
 
@@ -90,15 +91,23 @@ function LevelSwitch({ value, onChange, label = 'Analyzing' }) {
 // Every ranked row shares the same subheading — spend, purchases, CTR, CAC — so the only
 // thing that changes between cards is which metric decides the ranking (item.value).
 function InsightCard({ title, emoji, items, color, levelTag }) {
+  const [sortBySpend, setSortBySpend] = useState(false);
   if (!items.length) return null;
+  const sortedItems = sortBySpend ? [...items].sort((a, b) => b.spend - a.spend) : items;
   return (
     <div className="bg-card border border-border rounded-lg p-4 flex flex-col">
-      <h3 className="text-sm font-semibold text-text-primary mb-3 shrink-0 flex items-center gap-2">
-        <span>{emoji} {title}</span>
-        {levelTag && <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-accent/15 text-accent">{levelTag}</span>}
-      </h3>
+      <div className="flex items-center justify-between gap-2 mb-3 shrink-0">
+        <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2">
+          <span>{emoji} {title}</span>
+          {levelTag && <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-accent/15 text-accent">{levelTag}</span>}
+        </h3>
+        <button onClick={() => setSortBySpend(s => !s)}
+          className={`text-[10px] font-medium px-2 py-1 rounded-md border transition-colors shrink-0 ${sortBySpend ? 'bg-accent text-white border-accent' : 'bg-bg text-text-secondary border-border hover:border-accent/50'}`}>
+          Sort by spend
+        </button>
+      </div>
       <div className="flex flex-col gap-2 max-h-[480px] overflow-y-auto">
-        {items.map((item, i) => (
+        {sortedItems.map((item, i) => (
           <div key={i} className="bg-bg rounded-md p-3 border border-border/50">
             <div className="flex items-start justify-between gap-2">
               <div className="text-xs font-medium text-text-primary leading-relaxed">
@@ -904,6 +913,512 @@ function SpendChangesTab({ dayData, availableDays }) {
   );
 }
 
+// ---------------------------------------------------------------------------------------------
+// Budget Leak Detector — surfaces spend that's being wasted rather than just spent: ad sets
+// nobody's converting on, ad sets fatiguing an audience into rising costs, ad sets whose cost
+// efficiency is actively getting worse over the range, campaigns competing with each other for
+// the same product/audience, and spend driving traffic to products that are currently out of
+// stock. Computed entirely client-side from the same dayData/availableDays MetaTab already has
+// loaded (plus a light cross-reference against the Revenue Leak OOS data) — no new data source.
+// ---------------------------------------------------------------------------------------------
+
+const LEAK_MIN_SPEND = 300;          // floor below which a metric-based flag is just noise
+const HIGH_FREQUENCY = 3;            // Meta's own guidance: 3+ = audience fatigue risk
+const DEAD_WEIGHT_MIN_SPEND = 500;   // spend with zero purchases, above this, is a real leak
+const RISING_COST_MIN_SPEND = 500;   // combined spend across both halves of the range
+const RISING_COST_THRESHOLD = 0.25;  // 25%+ CPP increase from first half to second half
+
+// Words that show up in nearly every campaign/ad-set name regardless of product — stripping
+// them leaves only the tokens that actually identify what's being sold, so two campaigns for
+// the same product cluster together even when their audience/targeting suffixes differ.
+const CAMPAIGN_STOPWORDS = new Set([
+  'gnc', 'gncindia', 'gnc_india', 'india', 'ba', 'sales', 'sale', 'tof', 'mof', 'bof', 'cbo', 'auto',
+  'manual', 'lal', 'ot', 'dt', 'hhi', 'hni', 'mf', 'm', 'f', 'mix', 'cold', 'warm', 'advantage',
+  'using', 'test', 'budget', 'ad', 'set', 'ads', 'catalogue', 'launch', 'new', 'daily', 'via',
+  'only', 'from', 'with', 'and', 'the', 'of', 'for', 'all', 'products', 'product', 'image',
+  'video', 'images', 'videos', 'copy',
+  // Month names — nearly every campaign name ends with a date, so left unstripped these become
+  // the single most common token in the account and silently chain unrelated campaigns together
+  // (two campaigns sharing only "fitness"+"july" would otherwise cluster despite selling nothing
+  // in common — this is what caused an early version to merge 12 unrelated campaigns into one).
+  'jan', 'january', 'feb', 'february', 'mar', 'march', 'apr', 'april', 'may', 'jun', 'june',
+  'jul', 'july', 'aug', 'august', 'sep', 'sept', 'september', 'oct', 'october', 'nov',
+  'november', 'dec', 'december',
+]);
+
+function extractCoreTokens(name) {
+  if (!name) return [];
+  return name.toLowerCase().split(/[^a-z0-9]+/).filter(t => t.length >= 2 && !/^\d+$/.test(t) && !CAMPAIGN_STOPWORDS.has(t));
+}
+
+// Meta campaign names use internal shorthand that shares no words with the Shopify product
+// title it's actually promoting ("PP Whey" = "Pro Performance Whey", "TSFO" = "Triple Strength
+// Fish Oil") — a plain token-overlap match can never catch these, so they're expanded by hand.
+const CAMPAIGN_KEYWORD_ALIASES = { pp: ['whey'], tsfo: ['triple', 'strength', 'fish', 'oil'] };
+
+// A campaign matches a product if it contains a known alias whose expansion appears in the
+// product's tokens (a targeted, curated signal), OR if it shares 2+ literal tokens with the
+// product (requiring 2 avoids one generic word like "protein" or "isolate" — which recur across
+// a dozen unrelated products in this catalog — being treated as proof of a real match).
+// campaignTokensArr is deduped into a Set first: campaign and ad-set names largely repeat each
+// other (e.g. both contain "Yeast Protein Launch"), so counting the raw array would double-count
+// one shared word as if it were two.
+function campaignMatchesProduct(campaignTokensArr, pTokens) {
+  const campaignTokens = new Set(campaignTokensArr);
+  for (const t of campaignTokens) {
+    const expansion = CAMPAIGN_KEYWORD_ALIASES[t];
+    if (expansion && expansion.some(e => pTokens.has(e))) return true;
+  }
+  let shared = 0;
+  for (const t of campaignTokens) if (pTokens.has(t)) shared++;
+  return shared >= 2;
+}
+
+// TOF/MOF/BOF campaigns for the same product are normal funnel structure, not cannibalization —
+// only cluster campaigns that share both a funnel stage AND product-level keywords below.
+function detectFunnelStage(name) {
+  const raw = (name || '').toLowerCase().split(/[^a-z0-9]+/);
+  if (raw.includes('tof')) return 'TOF';
+  if (raw.includes('mof')) return 'MOF';
+  if (raw.includes('bof')) return 'BOF';
+  return null;
+}
+
+// Rolls all days up to one row per ad set, keeping each day's raw row too (rows) — the fatigue
+// and rising-cost checks need the trend across days, not just the period total combineRows gives.
+function aggregateAdSetsWithSeries(dayData, availableDays) {
+  const byAdSet = new Map();
+  for (const day of availableDays) {
+    for (const r of dayData[day]?.campaigns || []) {
+      const key = `${r.campaign_name}|||${r.ad_set_name || ''}`;
+      if (!byAdSet.has(key)) byAdSet.set(key, { name: r.ad_set_name || '(no ad set name)', campaign: r.campaign_name, rows: [] });
+      byAdSet.get(key).rows.push({ day, ...r });
+    }
+  }
+  return [...byAdSet.values()].map(({ name, campaign, rows }) => {
+    const sortedRows = [...rows].sort((a, b) => a.day.localeCompare(b.day));
+    const combined = combineRows(sortedRows);
+    const spendWeight = sortedRows.reduce((s, r) => s + (pf(r.amount_spent) || 0), 0);
+    const freqVals = sortedRows.map(r => pf(r.frequency)).filter(v => v != null);
+    const avgFrequency = freqVals.length && spendWeight > 0
+      ? sortedRows.reduce((s, r) => s + (pf(r.frequency) || 0) * (pf(r.amount_spent) || 0), 0) / spendWeight
+      : (freqVals.length ? freqVals.reduce((a, b) => a + b, 0) / freqVals.length : null);
+    return { ...combined, key: `${campaign}|||${name}`, name, campaign, rows: sortedRows, avgFrequency };
+  });
+}
+
+function detectDeadWeight(adSets) {
+  return adSets
+    .filter(a => (pf(a.amount_spent) || 0) >= DEAD_WEIGHT_MIN_SPEND && (pf(a.website_purchases) || 0) === 0)
+    .sort((a, b) => (pf(b.amount_spent) || 0) - (pf(a.amount_spent) || 0));
+}
+
+function detectAdFatigue(adSets) {
+  return adSets
+    .filter(a => a.avgFrequency != null && a.avgFrequency >= HIGH_FREQUENCY && (pf(a.amount_spent) || 0) >= LEAK_MIN_SPEND)
+    .sort((a, b) => b.avgFrequency - a.avgFrequency);
+}
+
+// Splits each ad set's daily rows into an early half and a late half of the uploaded range and
+// compares cost-per-purchase between them — a real efficiency trend, not just a single bad day.
+// "Early"/"late" are relative to each ad set's own active days, not fixed calendar dates — an ad
+// set launched partway through the range still gets its own days split down the middle, so a
+// date-range label is attached per row rather than one fixed pair of dates for the whole table.
+const dateRangeLabel = (rows) => rows.length === 1 ? rows[0].day.slice(5) : `${rows[0].day.slice(5)}–${rows[rows.length - 1].day.slice(5)}`;
+
+function detectRisingCost(adSets) {
+  const out = [];
+  for (const a of adSets) {
+    if (a.rows.length < 2) continue;
+    const mid = Math.ceil(a.rows.length / 2);
+    const firstHalf = a.rows.slice(0, mid);
+    const secondHalf = a.rows.slice(mid);
+    if (!secondHalf.length) continue;
+    const sumSpend = (rows) => rows.reduce((s, r) => s + (pf(r.amount_spent) || 0), 0);
+    const sumPurch = (rows) => rows.reduce((s, r) => s + (pf(r.website_purchases) || 0), 0);
+    const firstSpend = sumSpend(firstHalf), firstPurch = sumPurch(firstHalf);
+    const secondSpend = sumSpend(secondHalf), secondPurch = sumPurch(secondHalf);
+    if (firstSpend + secondSpend < RISING_COST_MIN_SPEND || firstPurch === 0) continue;
+    const firstCpp = firstSpend / firstPurch;
+    const firstRange = dateRangeLabel(firstHalf);
+    const secondRange = dateRangeLabel(secondHalf);
+    if (secondPurch === 0) { out.push({ ...a, firstCpp, secondCpp: null, firstRange, secondRange, collapsed: true }); continue; }
+    const secondCpp = secondSpend / secondPurch;
+    const pctChange = (secondCpp - firstCpp) / firstCpp;
+    if (pctChange >= RISING_COST_THRESHOLD) out.push({ ...a, firstCpp, secondCpp, firstRange, secondRange, collapsed: false, pctChange });
+  }
+  return out.sort((a, b) => (pf(b.amount_spent) || 0) - (pf(a.amount_spent) || 0));
+}
+
+// Union-find over campaigns (not ad sets — cannibalization is a cross-campaign concern, since ad
+// sets inside one campaign already share a budget by design): two campaigns cluster together
+// when they're the same funnel stage and share 2+ product-identifying tokens in their names.
+function detectCompetingCampaigns(campaignRows) {
+  const entries = campaignRows
+    .filter(c => (pf(c.amount_spent) || 0) > 100)
+    .map(c => ({
+      name: c.campaign_name,
+      spend: pf(c.amount_spent) || 0,
+      purchases: pf(c.website_purchases) || 0,
+      roas: pf(c.roas),
+      stage: detectFunnelStage(c.campaign_name),
+      tokens: new Set(extractCoreTokens(c.campaign_name)),
+    }));
+
+  const parent = entries.map((_, i) => i);
+  const find = (x) => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+  const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb; };
+
+  for (let i = 0; i < entries.length; i++) {
+    for (let j = i + 1; j < entries.length; j++) {
+      if (entries[i].stage !== entries[j].stage) continue;
+      let shared = 0;
+      for (const t of entries[i].tokens) if (entries[j].tokens.has(t)) shared++;
+      if (shared >= 2) union(i, j);
+    }
+  }
+
+  const groups = new Map();
+  entries.forEach((e, i) => {
+    const root = find(i);
+    if (!groups.has(root)) groups.set(root, []);
+    groups.get(root).push(e);
+  });
+
+  return [...groups.values()]
+    .filter(g => g.length >= 2)
+    .map(g => ({
+      campaigns: [...g].sort((a, b) => b.spend - a.spend),
+      totalSpend: g.reduce((s, c) => s + c.spend, 0),
+      totalPurchases: g.reduce((s, c) => s + c.purchases, 0),
+    }))
+    .sort((a, b) => b.totalSpend - a.totalSpend);
+}
+
+// Cross-references ad set/campaign names against currently-OOS products with 500+ sessions
+// (Shopify handles confirm similar-sounding titles are often genuinely different product
+// listings, so products are never merged up front on name similarity — only after matching, and
+// only when two products resolve to the exact same set of matched ad sets, meaning the ad
+// naming genuinely can't distinguish which one the spend belongs to).
+function detectOosSpendWaste(adSets, oosProducts, availableDays) {
+  if (!oosProducts?.length) return [];
+  const raw = [];
+  for (const product of oosProducts) {
+    const pTokens = new Set(extractCoreTokens(product.product_title).filter(t => t.length >= 3));
+    if (pTokens.size < 2) continue;
+    const matches = adSets.filter(a => campaignMatchesProduct(extractCoreTokens(`${a.campaign} ${a.name}`), pTokens));
+    const spend = matches.reduce((s, a) => s + (pf(a.amount_spent) || 0), 0);
+    if (spend > 0) raw.push({ product: product.product_title, sessions: product.sessions, oosSince: product.oosSince, matches, spend });
+  }
+
+  const bySignature = new Map();
+  for (const r of raw) {
+    const sig = r.matches.map(a => a.key).sort().join('\n');
+    if (!bySignature.has(sig)) bySignature.set(sig, { titles: [], sessions: 0, oosSince: r.oosSince, matches: r.matches.sort((a, b) => (pf(b.amount_spent) || 0) - (pf(a.amount_spent) || 0)), spend: r.spend });
+    const e = bySignature.get(sig);
+    e.titles.push(r.product);
+    e.sessions += r.sessions;
+    // Multiple merged products can each have gone OOS on a different date — keep the earliest,
+    // since that's when this ad spend first became waste rather than legitimate traffic.
+    if (r.oosSince && (!e.oosSince || r.oosSince < e.oosSince)) e.oosSince = r.oosSince;
+  }
+
+  // Day-by-day spend across the matched ad sets, for the cross-verification chart — zero-filled
+  // against the full uploaded range so a product's chart lines up with every other product's.
+  return [...bySignature.values()].map(e => {
+    const byDay = new Map(availableDays.map(d => [d, 0]));
+    for (const a of e.matches) {
+      for (const r of a.rows) byDay.set(r.day, (byDay.get(r.day) || 0) + (pf(r.amount_spent) || 0));
+    }
+    return {
+      product: e.titles.join(' / '), sessions: e.sessions, oosSince: e.oosSince,
+      matches: e.matches, spend: e.spend,
+      dailySpend: availableDays.map(d => ({ day: d, spend: byDay.get(d) || 0 })),
+    };
+  }).sort((a, b) => b.spend - a.spend);
+}
+
+const OOS_SESSIONS_THRESHOLD = 500;
+
+// Collapsed-by-default section header (matches the CampaignTable/NewAdsLaunched convention
+// elsewhere in this file) — the detector can flag five different things at once, and forcing
+// every table open by default made the card too long to scan for what actually needs attention.
+function LeakAccordion({ emoji, title, count, subtitle, spendLabel, spendValue, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="bg-bg rounded-md border border-border/50">
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between gap-2 p-3 flex-wrap text-left">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-text-primary flex items-center gap-1.5">
+            <span className="text-text-muted text-[10px]">{open ? '▼' : '▶'}</span>
+            <span>{emoji} {title}</span>
+            {count != null && <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-negative/15 text-negative">{count}</span>}
+          </h3>
+          {subtitle && <p className="text-[11px] text-text-muted mt-0.5">{subtitle}</p>}
+        </div>
+        {spendValue != null && (
+          <div className="text-right shrink-0">
+            <div className="text-[10px] text-text-muted uppercase">{spendLabel}</div>
+            <div className="text-sm font-bold text-negative">{inr(spendValue)}</div>
+          </div>
+        )}
+      </button>
+      {open && <div className="px-3 pb-3">{children}</div>}
+    </div>
+  );
+}
+
+// Plain inline SVG bar chart (no charting library in this project) — one bar per uploaded day of
+// spend on the matched ad sets, with a dashed marker at the product's oos_since date so spend
+// before vs. after the product actually went OOS is visually distinguishable. That's the
+// cross-check: bars still lit up red well past the marker are the real waste.
+function DailySpendChart({ dailySpend, oosSince }) {
+  if (!dailySpend.length) return null;
+  const max = Math.max(1, ...dailySpend.map(d => d.spend));
+  const barW = 100 / dailySpend.length;
+  const oosIndex = oosSince ? dailySpend.findIndex(d => d.day >= oosSince) : -1;
+  return (
+    <div className="mt-2">
+      <svg viewBox="0 0 100 40" preserveAspectRatio="none" className="w-full h-14">
+        {oosIndex >= 0 && (
+          <rect x={oosIndex * barW} y="0" width={100 - oosIndex * barW} height="40" className="fill-negative/5" />
+        )}
+        {dailySpend.map((d, i) => {
+          const h = (d.spend / max) * 36;
+          const beforeOos = oosIndex >= 0 && i < oosIndex;
+          return (
+            <rect key={d.day} x={i * barW + barW * 0.15} y={40 - h} width={Math.max(barW * 0.7, 0.5)} height={h}
+              className={beforeOos ? 'fill-text-muted/50' : 'fill-negative/70'}>
+              <title>{`${d.day}: ${inr(d.spend)}`}</title>
+            </rect>
+          );
+        })}
+        {oosIndex >= 0 && (
+          <line x1={oosIndex * barW} y1="0" x2={oosIndex * barW} y2="40" className="stroke-negative" strokeWidth="0.6" strokeDasharray="2,1" vectorEffect="non-scaling-stroke" />
+        )}
+      </svg>
+      <div className="flex items-center justify-between text-[9px] text-text-muted mt-0.5">
+        <span>{dailySpend[0].day.slice(5)}</span>
+        {oosSince && <span className="text-negative font-medium">┊ OOS since {oosSince.slice(5)}</span>}
+        <span>{dailySpend[dailySpend.length - 1].day.slice(5)}</span>
+      </div>
+    </div>
+  );
+}
+
+function BudgetLeakDetector({ dayData, availableDays }) {
+  // Reuses the same OOS-with-sessions computation already powering the Products tab's "Sessions
+  // Lost While OOS" card, rather than re-deriving it — one source of truth for what's OOS and
+  // how much traffic it's still getting.
+  const { data: oosData } = useApi('/api/analytics/oos-sessions');
+  const oosAbove500 = useMemo(
+    () => (oosData?.oosWithSessions || [])
+      .filter(p => (p.sessions_during_oos || 0) >= OOS_SESSIONS_THRESHOLD)
+      .map(p => ({ product_title: p.product_title, sessions: p.sessions_during_oos, oosSince: p.oos_since })),
+    [oosData]
+  );
+
+  const adSets = useMemo(() => aggregateAdSetsWithSeries(dayData, availableDays), [dayData, availableDays]);
+  const campaignRows = useMemo(() => aggregateByLevel(availableDays.flatMap(d => dayData[d]?.campaigns || []), 'campaign'), [dayData, availableDays]);
+
+  const deadWeight = useMemo(() => detectDeadWeight(adSets), [adSets]);
+  const fatigue = useMemo(() => detectAdFatigue(adSets), [adSets]);
+  const risingCost = useMemo(() => detectRisingCost(adSets), [adSets]);
+  const competing = useMemo(() => detectCompetingCampaigns(campaignRows), [campaignRows]);
+  const oosWaste = useMemo(() => detectOosSpendWaste(adSets, oosAbove500, availableDays), [adSets, oosAbove500, availableDays]);
+  const hasFrequencyData = adSets.some(a => a.avgFrequency != null);
+
+  const deadWeightSpend = deadWeight.reduce((s, a) => s + (pf(a.amount_spent) || 0), 0);
+  const fatigueSpend = fatigue.reduce((s, a) => s + (pf(a.amount_spent) || 0), 0);
+  const risingCostSpend = risingCost.reduce((s, a) => s + (pf(a.amount_spent) || 0), 0);
+  const competingSpend = competing.reduce((s, g) => s + g.totalSpend, 0);
+  const oosWasteSpend = oosWaste.reduce((s, o) => s + o.spend, 0);
+  const totalIssues = deadWeight.length + fatigue.length + risingCost.length + competing.length + oosWaste.length;
+
+  if (!availableDays.length) return null;
+
+  return (
+    <div className="bg-card border border-border rounded-lg p-4">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div>
+          <h2 className="text-base font-semibold text-text-primary">🚨 Budget Leak Detector</h2>
+          <p className="text-xs text-text-muted mt-0.5">Spend that's being wasted, not just spent — across all {availableDays.length} uploaded days</p>
+        </div>
+        {totalIssues > 0 && (
+          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-negative/15 text-negative">{totalIssues} issue{totalIssues === 1 ? '' : 's'} flagged</span>
+        )}
+      </div>
+
+      {totalIssues === 0 && hasFrequencyData ? (
+        <p className="text-xs text-text-muted py-6 text-center">No major leak signals in the uploaded range.</p>
+      ) : (
+        <div className="flex flex-col gap-4">
+
+          {deadWeight.length > 0 && (
+            <LeakAccordion emoji="💀" title="Not Working" count={deadWeight.length}
+              subtitle={`Ad sets spending ≥${inr(DEAD_WEIGHT_MIN_SPEND)} with zero purchases across the range`}
+              spendLabel="Wasted" spendValue={deadWeightSpend}>
+              <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left text-[10px] font-medium text-text-muted uppercase py-1.5 px-2">Ad Set</th>
+                      <th className="text-right text-[10px] font-medium text-text-muted uppercase py-1.5 px-2">Spend</th>
+                      <th className="text-right text-[10px] font-medium text-text-muted uppercase py-1.5 px-2">CTR</th>
+                      <th className="text-right text-[10px] font-medium text-text-muted uppercase py-1.5 px-2">Checkouts</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {deadWeight.map(a => (
+                      <tr key={a.key} className="border-b border-border/50">
+                        <td className="py-2 px-2 text-xs max-w-[280px] truncate text-text-primary" title={`${a.name}\n${a.campaign}`}>
+                          <div className="truncate font-medium">{a.name}</div>
+                          <div className="truncate text-[10px] text-text-muted">{a.campaign}</div>
+                        </td>
+                        <td className="py-2 px-2 text-xs text-right font-semibold text-negative">{inr(pf(a.amount_spent))}</td>
+                        <td className="py-2 px-2 text-xs text-right text-text-secondary">{pctD(pf(a.ctr_all))}</td>
+                        <td className="py-2 px-2 text-xs text-right text-text-secondary">{fmt(pf(a.website_checkouts))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </LeakAccordion>
+          )}
+
+          <LeakAccordion emoji="🔥" title="Ad Fatigue (High Frequency)" count={fatigue.length > 0 ? fatigue.length : null}
+            subtitle={`Frequency ≥${HIGH_FREQUENCY} — same audience seeing the ad repeatedly, CPMs typically climb from here`}
+            spendLabel="At risk" spendValue={fatigue.length > 0 ? fatigueSpend : null}>
+            {!hasFrequencyData ? (
+              <p className="text-xs text-text-muted py-3 text-center">Frequency wasn't captured in these uploads yet — re-upload the latest Meta CSV to enable this check.</p>
+            ) : fatigue.length === 0 ? (
+              <p className="text-xs text-text-muted py-3 text-center">No ad sets above the frequency threshold.</p>
+            ) : (
+              <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left text-[10px] font-medium text-text-muted uppercase py-1.5 px-2">Ad Set</th>
+                      <th className="text-right text-[10px] font-medium text-text-muted uppercase py-1.5 px-2">Frequency</th>
+                      <th className="text-right text-[10px] font-medium text-text-muted uppercase py-1.5 px-2">CPM</th>
+                      <th className="text-right text-[10px] font-medium text-text-muted uppercase py-1.5 px-2">Spend</th>
+                      <th className="text-right text-[10px] font-medium text-text-muted uppercase py-1.5 px-2">ROAS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fatigue.map(a => (
+                      <tr key={a.key} className="border-b border-border/50">
+                        <td className="py-2 px-2 text-xs max-w-[280px] truncate text-text-primary" title={`${a.name}\n${a.campaign}`}>
+                          <div className="truncate font-medium">{a.name}</div>
+                          <div className="truncate text-[10px] text-text-muted">{a.campaign}</div>
+                        </td>
+                        <td className="py-2 px-2 text-xs text-right font-semibold text-negative">{fmt(a.avgFrequency)}x</td>
+                        <td className="py-2 px-2 text-xs text-right text-text-secondary">{inr(pf(a.cpm))}</td>
+                        <td className="py-2 px-2 text-xs text-right text-text-secondary">{inr(pf(a.amount_spent))}</td>
+                        <td className="py-2 px-2 text-xs text-right text-text-secondary">{fmt(pf(a.roas))}x</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </LeakAccordion>
+
+          {risingCost.length > 0 && (
+            <LeakAccordion emoji="📈" title="Rising Cost Per Purchase" count={risingCost.length}
+              subtitle={`CPP climbed ${Math.round(RISING_COST_THRESHOLD * 100)}%+ from the first half of this ad set's active days to the second half (or conversions stopped entirely) — split down the middle of each ad set's own days, not a fixed calendar date, so "early"/"late" differ per row (see the date range under each value)`}
+              spendLabel="Total spend" spendValue={risingCostSpend}>
+              <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left text-[10px] font-medium text-text-muted uppercase py-1.5 px-2">Ad Set</th>
+                      <th className="text-right text-[10px] font-medium text-text-muted uppercase py-1.5 px-2">CPP (early)</th>
+                      <th className="text-right text-[10px] font-medium text-text-muted uppercase py-1.5 px-2">CPP (late)</th>
+                      <th className="text-right text-[10px] font-medium text-text-muted uppercase py-1.5 px-2">Change</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {risingCost.map(a => (
+                      <tr key={a.key} className="border-b border-border/50">
+                        <td className="py-2 px-2 text-xs max-w-[280px] truncate text-text-primary" title={`${a.name}\n${a.campaign}`}>
+                          <div className="truncate font-medium">{a.name}</div>
+                          <div className="truncate text-[10px] text-text-muted">{a.campaign}</div>
+                        </td>
+                        <td className="py-2 px-2 text-xs text-right text-text-secondary">
+                          {inr(a.firstCpp)}
+                          <div className="text-[9px] text-text-muted font-normal">{a.firstRange}</div>
+                        </td>
+                        <td className="py-2 px-2 text-xs text-right font-semibold text-negative">
+                          {a.collapsed ? 'no purchases' : inr(a.secondCpp)}
+                          <div className="text-[9px] text-text-muted font-normal">{a.secondRange}</div>
+                        </td>
+                        <td className="py-2 px-2 text-xs text-right font-semibold text-negative">{a.collapsed ? 'stopped converting' : `+${Math.round(a.pctChange * 100)}%`}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </LeakAccordion>
+          )}
+
+          {competing.length > 0 && (
+            <LeakAccordion emoji="⚔️" title="Competing Campaigns" count={competing.length}
+              subtitle="Same funnel stage, same product keywords, different campaigns — likely bidding against each other for the same audience"
+              spendLabel="Combined spend" spendValue={competingSpend}>
+              <div className="flex flex-col gap-2">
+                {competing.map((g, i) => (
+                  <div key={i} className="bg-card rounded-md p-2.5 border border-border/50">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[11px] font-medium text-text-secondary">{g.campaigns.length} campaigns · {fmt(g.totalPurchases)} purchases combined</span>
+                      <span className="text-xs font-bold text-negative">{inr(g.totalSpend)}</span>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      {g.campaigns.map((c, j) => (
+                        <div key={j} className="flex items-center justify-between gap-2 text-[11px]">
+                          <span className="text-text-primary truncate" title={c.name}>{c.name}</span>
+                          <span className="text-text-muted shrink-0">{inr(c.spend)} · {fmt(c.purchases)} purch · {c.roas != null ? `${fmt(c.roas)}x` : '—'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </LeakAccordion>
+          )}
+
+          {oosWaste.length > 0 && (
+            <LeakAccordion emoji="📦" title="Spend On Out-Of-Stock Products" count={oosWaste.length}
+              subtitle="Products with 500+ sessions while OOS, matched against ad names still driving traffic there"
+              spendLabel="Spend" spendValue={oosWasteSpend}>
+              <div className="flex flex-col gap-2">
+                {oosWaste.map((o, i) => (
+                  <div key={i} className="bg-card rounded-md p-2.5 border border-border/50">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[11px] font-medium text-text-primary truncate" title={o.product}>{o.product}</span>
+                      <span className="text-[11px] text-text-muted shrink-0">{fmt(o.sessions)} sessions OOS</span>
+                    </div>
+                    <DailySpendChart dailySpend={o.dailySpend} oosSince={o.oosSince} />
+                    <div className="flex flex-col gap-1 mt-2">
+                      {o.matches.map((a, j) => (
+                        <div key={j} className="flex items-center justify-between gap-2 text-[11px]">
+                          <span className="text-text-secondary truncate" title={`${a.name} / ${a.campaign}`}>{a.name}</span>
+                          <span className="text-negative font-medium shrink-0">{inr(pf(a.amount_spent))}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </LeakAccordion>
+          )}
+
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function MetaTab() {
   const [refreshKey, setRefreshKey] = useState(0);
   const { data, loading } = useApi(`/api/analytics/meta-reports?_k=${refreshKey}`);
@@ -1058,11 +1573,6 @@ export default function MetaTab() {
         </div>
       )}
 
-      {/* New Ads Launched — by date */}
-      {availableDays.length >= 1 && (
-        <div id="meta-new-ads"><NewAdsLaunched dayData={dayData} availableDays={availableDays} /></div>
-      )}
-
       {/* Focus Products — keyword search across campaigns/ad sets/ads, with its own level strip */}
       {availableDays.length > 0 && (
         <div id="meta-focus-products"><FocusProductsCard dayData={dayData} availableDays={availableDays} /></div>
@@ -1071,6 +1581,19 @@ export default function MetaTab() {
       {/* Budget Changes — independent Campaign/Ad Set/Ad level strip inside the component */}
       {availableDays.length > 0 && (
         <div id="meta-budget-changes"><SpendChangesTab dayData={dayData} availableDays={availableDays} /></div>
+      )}
+
+      {/* Budget Leak Detector — sits right after Budget Changes since both live in the same
+          "what's going wrong with spend" mental space, but this one looks at waste rather than
+          just budget deltas. */}
+      {availableDays.length > 0 && (
+        <div id="meta-budget-leak"><BudgetLeakDetector dayData={dayData} availableDays={availableDays} /></div>
+      )}
+
+      {/* New Ads Launched — sits right above All Campaigns so a fresh launch is the last thing
+          you check before the full campaign breakdown. */}
+      {availableDays.length >= 1 && (
+        <div id="meta-new-ads"><NewAdsLaunched dayData={dayData} availableDays={availableDays} /></div>
       )}
 
       {/* Campaign table — follows the same day/week selector as the insights above. Expanding
