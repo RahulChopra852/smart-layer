@@ -5,14 +5,23 @@ import { useWorkspace } from '../lib/workspace';
 
 const STATUS_COLOR = { active: 'text-positive', error: 'text-negative', revoked: 'text-text-muted' };
 
-// Workspace-level connection management. The normal Shopify path is the connector app's install
-// hook (no form needed — see server/routes/hooks.js); this form covers the manual-token fallback
-// and every other source type (vwo/psi/metabase), which have no equivalent install flow yet.
+const TOKEN_PLACEHOLDERS = {
+  shopify: 'sdbc_live_... (from the Smart Layer Shopify app)',
+  vwo: 'VWO API token',
+  psi: 'PageSpeed Insights API key',
+  metabase: 'Metabase API key',
+};
+
+// Workspace-level connection management. Every source is connected the same way: paste an
+// API key/token here, no OAuth flow, no install webhook. For Shopify specifically that key is
+// the fixed proxy key the connector app issues after a merchant installs it — Smart Layer never
+// sees a raw Shopify token, every query goes through the connector's own GraphQL proxy with this
+// key as the Bearer token (see server/connectors/shopify.js).
 export default function ConnectionsHub({ onCreated }) {
   const workspace = useWorkspace();
   const { data, loading, refetch } = useApi('/api/connections');
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ type: 'shopify', label: '', shopDomain: '', token: '' });
+  const [form, setForm] = useState({ type: 'shopify', label: '', token: '' });
   const [error, setError] = useState(null);
 
   async function handleCreate(e) {
@@ -21,17 +30,14 @@ export default function ConnectionsHub({ onCreated }) {
     setError(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const body = form.type === 'shopify'
-        ? { type: 'shopify', label: form.label || form.shopDomain, meta: { shop_domain: form.shopDomain, manual_token: true }, secret: { access_token: form.token } }
-        : { type: form.type, label: form.label, secret: { api_token: form.token } };
-
+      const secretKey = form.type === 'shopify' ? 'proxy_key' : 'api_token';
       const res = await fetch('/api/connections', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}`, 'x-workspace-id': workspace.id },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ type: form.type, label: form.label, secret: { [secretKey]: form.token } }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
-      setForm({ type: 'shopify', label: '', shopDomain: '', token: '' });
+      setForm({ type: 'shopify', label: '', token: '' });
       refetch();
       onCreated?.();
     } catch (err) {
@@ -62,7 +68,7 @@ export default function ConnectionsHub({ onCreated }) {
         <div className="flex items-center gap-2">
           <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
             className="text-xs bg-bg border border-border rounded px-2 py-1">
-            <option value="shopify">Shopify (manual token)</option>
+            <option value="shopify">Shopify</option>
             <option value="vwo">VWO</option>
             <option value="psi">PageSpeed Insights</option>
             <option value="metabase">Metabase</option>
@@ -70,12 +76,7 @@ export default function ConnectionsHub({ onCreated }) {
           <input placeholder="Label" value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
             className="flex-1 text-xs bg-bg border border-border rounded px-2 py-1" />
         </div>
-        {form.type === 'shopify' && (
-          <input placeholder="shop-domain.myshopify.com" value={form.shopDomain}
-            onChange={e => setForm(f => ({ ...f, shopDomain: e.target.value }))}
-            className="text-xs bg-bg border border-border rounded px-2 py-1" />
-        )}
-        <input placeholder={form.type === 'shopify' ? 'Admin API access token' : 'API token / key'} value={form.token}
+        <input placeholder={TOKEN_PLACEHOLDERS[form.type]} value={form.token}
           onChange={e => setForm(f => ({ ...f, token: e.target.value }))}
           className="text-xs bg-bg border border-border rounded px-2 py-1" type="password" />
         {error && <p className="text-xs text-negative">{error}</p>}

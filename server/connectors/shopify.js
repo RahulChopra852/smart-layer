@@ -1,44 +1,22 @@
-import { cached } from '../cache/liveCache.js';
 import { decryptSecret } from '../crypto/secrets.js';
-import { setConnectionStatus } from '../db/supabaseDb.js';
 
-const API_VERSION = '2025-10';
-const TOKEN_CACHE_TTL_SECONDS = 50 * 60; // conservative default; tighten once the connector
-// app's real expires_at contract is confirmed (see docs/ARCHITECTURE.md §6.1 — "finalize field
-// names against the connector repo before implementing")
-
-// Resolves a live Shopify Admin access token for a connection: either vended by the Smart Layer
-// connector app (the normal path, connection.meta.shop_domain set, no secret stored here), or a
-// manually pasted token (fallback path, connection.meta.manual_token=true, secret_ciphertext set).
-async function getAccessToken(connection) {
-  if (connection.meta?.manual_token) {
-    const secret = decryptSecret(connection.secret_ciphertext);
-    return secret.access_token;
-  }
-
-  const shop = connection.meta?.shop_domain;
-  if (!shop) throw new Error(`Connection ${connection.id} has no shop_domain in meta`);
-
-  return cached(`shopify-token:${connection.id}`, TOKEN_CACHE_TTL_SECONDS, async () => {
-    const url = `${process.env.CONNECTOR_URL}/api/token?shop=${encodeURIComponent(shop)}`;
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${process.env.CONNECTOR_API_KEY}` } });
-    if (!res.ok) {
-      await setConnectionStatus(connection.id, 'error', `Token vending failed: HTTP ${res.status}`);
-      throw new Error(`Connector token vending failed for ${shop}: HTTP ${res.status}`);
-    }
-    const data = await res.json();
-    return data.access_token;
-  });
-}
-
+// The Smart Layer Shopify connector app is a fixed-key GraphQL PROXY, not a token vendor: a
+// merchant installs it, it shows them one fixed key (sdbc_live_...), and every query goes
+// through the connector's own POST /api/graphql with that key as the Bearer token — the
+// connector resolves the shop from the key, refreshes Shopify's token internally, forwards the
+// query, and returns Shopify's response verbatim. Smart Layer never sees a raw Shopify token.
+// The merchant pastes that fixed key into ConnectionsHub; it's stored encrypted as
+// connection.secret_ciphertext = { proxy_key }. See CLAUDE.md in the connector repo.
 async function shopifyGraphQL(connection, query, variables = {}) {
-  const shop = connection.meta?.shop_domain;
-  const token = await getAccessToken(connection);
-  const res = await fetch(`https://${shop}/admin/api/${API_VERSION}/graphql.json`, {
+  const secret = decryptSecret(connection.secret_ciphertext);
+  if (!secret?.proxy_key) throw new Error(`Connection ${connection.id} has no Shopify proxy key stored`);
+
+  const res = await fetch(`${process.env.CONNECTOR_URL}/api/graphql`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': token },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret.proxy_key}` },
     body: JSON.stringify({ query, variables }),
   });
+  if (!res.ok) throw new Error(`Connector proxy error: HTTP ${res.status}`);
   const json = await res.json();
   if (json.errors) throw new Error(`Shopify GraphQL error: ${JSON.stringify(json.errors)}`);
   return json.data;
@@ -138,14 +116,14 @@ async function fetchCatalogSnapshot(connection) {
 
 // probe() answers "can we actually query this shop with this connection right now" — the setup
 // form's field checklist. Shopify's fields are fixed (not brand-configurable like GA4 dimensions),
-// so this is really an auth + reachability check per required query.
+// so this is really an auth + reachability check per required query, through the connector proxy.
 export async function probe(connection) {
   const fields = [];
   try {
     await shopifyGraphQL(connection, `query { shop { name } }`);
-    fields.push({ name: 'Admin API access', present: true });
+    fields.push({ name: 'Connector proxy access', present: true });
   } catch (err) {
-    fields.push({ name: 'Admin API access', present: false, error: err.message });
+    fields.push({ name: 'Connector proxy access', present: false, error: err.message });
     return { ok: false, fields };
   }
 

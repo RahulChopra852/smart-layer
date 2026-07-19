@@ -51,20 +51,61 @@ function SignIn() {
   );
 }
 
-function WorkspaceSwitcher({ workspace, setWorkspace }) {
-  const { data } = useApi('/api/workspaces', { skip: !!workspace });
-  const workspaces = useMemo(() => data?.workspaces || [], [data]);
-
-  useEffect(() => {
-    if (!workspace && workspaces.length > 0) setWorkspace(workspaces[0]);
-  }, [workspaces, workspace, setWorkspace]);
-
+function WorkspaceSwitcher({ workspaces, workspace, setWorkspace }) {
   if (workspaces.length <= 1) return null;
   return (
     <select value={workspace?.id || ''} onChange={e => setWorkspace(workspaces.find(w => w.id === e.target.value))}
       className="text-xs bg-bg border border-border rounded px-2 py-1">
       {workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
     </select>
+  );
+}
+
+function slugify(name) {
+  return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+}
+
+// The only onboarding path: no connector install webhook exists (see
+// docs/ARCHITECTURE.md §6.1), so a brand's first step is always creating a workspace here by
+// hand, then pasting their Shopify/GA4/etc. keys into ConnectionsHub one at a time.
+function CreateWorkspace({ onCreated }) {
+  const [name, setName] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setCreating(true);
+    setError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/workspaces', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ name, slug: slugify(name) }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      const workspace = await res.json();
+      onCreated(workspace);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="bg-card border border-border rounded-lg p-4 max-w-sm flex flex-col gap-2">
+      <h2 className="text-sm font-semibold text-text-primary">Create your workspace</h2>
+      <p className="text-xs text-text-muted">No connector install hook exists yet — start by naming your brand's workspace, then connect Shopify/GA4/etc. by pasting their API keys.</p>
+      <input required placeholder="Brand name" value={name} onChange={e => setName(e.target.value)}
+        className="text-sm bg-bg border border-border rounded px-3 py-2" />
+      {error && <p className="text-xs text-negative">{error}</p>}
+      <button type="submit" disabled={creating}
+        className="self-start px-3 py-1.5 text-xs font-medium rounded-md bg-accent text-white hover:opacity-90 disabled:opacity-50">
+        {creating ? 'Creating...' : 'Create workspace'}
+      </button>
+    </form>
   );
 }
 
@@ -97,6 +138,13 @@ function AddDataSource({ notLiveReports, onPick }) {
 // configured yet simply isn't shown until they fill in its form (via "Connect a data source").
 function Dashboard({ session }) {
   const [workspace, setWorkspace] = useState(null);
+  const { data: wsData, refetch: refetchWorkspaces } = useApi('/api/workspaces');
+  const workspaces = useMemo(() => wsData?.workspaces || [], [wsData]);
+
+  useEffect(() => {
+    if (!workspace && workspaces.length > 0) setWorkspace(workspaces[0]);
+  }, [workspaces, workspace]);
+
   const { data, refetch } = useApi('/api/reports', { skip: !workspace });
   const reports = useMemo(() => data?.reports || [], [data]);
   const liveReports = useMemo(() => reports.filter(r => ['live', 'validated'].includes(r.status) && REPORT_COMPONENTS[r.id]), [reports]);
@@ -120,7 +168,7 @@ function Dashboard({ session }) {
               <span className="text-lg font-semibold text-text-primary">Smart Layer</span>
             </div>
             <div className="flex items-center gap-3">
-              <WorkspaceSwitcher workspace={workspace} setWorkspace={setWorkspace} />
+              <WorkspaceSwitcher workspaces={workspaces} workspace={workspace} setWorkspace={setWorkspace} />
               <span className="text-xs text-text-muted">{session.user.email}</span>
               <button onClick={() => supabase.auth.signOut()} className="text-xs text-text-muted hover:text-text-primary">Sign out</button>
             </div>
@@ -143,7 +191,7 @@ function Dashboard({ session }) {
         </header>
         <main className="max-w-5xl mx-auto px-4 py-4">
           {!workspace ? (
-            <p className="text-sm text-text-muted">No workspace yet — install the Shopify app to get started.</p>
+            <CreateWorkspace onCreated={(ws) => { refetchWorkspaces(); setWorkspace(ws); }} />
           ) : !active ? (
             <p className="text-sm text-text-muted">No data sources connected yet — use "Connect a data source" above.</p>
           ) : (

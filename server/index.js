@@ -3,7 +3,6 @@ import 'dotenv/config';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import hooksRoutes from './routes/hooks.js';
 import workspacesRoutes from './routes/workspaces.js';
 import connectionsRoutes from './routes/connections.js';
 import reportsRoutes from './routes/reports.js';
@@ -16,11 +15,10 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 
-// No JWT — verified via HMAC shared secret with the connector app instead (see routes/hooks.js)
-app.use('/api/hooks', hooksRoutes);
-
 // Everything below requires a Supabase JWT; workspace-scoped routes additionally require
-// x-workspace-id + membership (enforced per-router via requireAuth/requireWorkspace).
+// x-workspace-id + membership (enforced per-router via requireAuth/requireWorkspace). Onboarding
+// is manual-paste (create workspace, then paste each source's API key/token into
+// ConnectionsHub) — there is no connector-app install webhook; see docs/ARCHITECTURE.md §6.1.
 app.use('/api/workspaces', workspacesRoutes);
 app.use('/api/connections', connectionsRoutes);
 app.use('/api/reports', reportsRoutes);
