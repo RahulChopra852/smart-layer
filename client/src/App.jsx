@@ -10,6 +10,13 @@ function getDefaultDates() {
   return { today, weekAgo };
 }
 
+// One entry per report definition that has a dashboard built — adding a new report to the
+// server registry doesn't show up here until its component exists. Each component already
+// knows how to render its own SetupForm when report.status !== 'live' (see ProductsTab.jsx).
+const REPORT_COMPONENTS = {
+  products: ProductsTab,
+};
+
 function SignIn() {
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
@@ -61,8 +68,48 @@ function WorkspaceSwitcher({ workspace, setWorkspace }) {
   );
 }
 
+function AddDataSource({ notLiveReports, onPick }) {
+  const [open, setOpen] = useState(false);
+  if (notLiveReports.length === 0) return null;
+
+  return (
+    <div className="relative">
+      <button onClick={() => setOpen(o => !o)}
+        className="px-2.5 py-1 text-xs font-medium rounded-md border border-border text-text-secondary hover:border-accent/50">
+        + Connect a data source
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-1 w-48 bg-card border border-border rounded-md shadow-lg z-20 py-1">
+          {notLiveReports.map(r => (
+            <button key={r.id} onClick={() => { onPick(r.id); setOpen(false); }}
+              className="w-full text-left px-3 py-1.5 text-xs text-text-secondary hover:bg-bg flex items-center justify-between">
+              {r.title}
+              {r.status === 'error' && <span className="text-negative">⚠</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Only reports with status='live' get a persistent nav tab — a report the brand hasn't
+// configured yet simply isn't shown until they fill in its form (via "Connect a data source").
 function Dashboard({ session }) {
   const [workspace, setWorkspace] = useState(null);
+  const { data, refetch } = useApi('/api/reports', { skip: !workspace });
+  const reports = useMemo(() => data?.reports || [], [data]);
+  const liveReports = useMemo(() => reports.filter(r => ['live', 'validated'].includes(r.status) && REPORT_COMPONENTS[r.id]), [reports]);
+  const notLiveReports = useMemo(() => reports.filter(r => !['live', 'validated'].includes(r.status) && REPORT_COMPONENTS[r.id]), [reports]);
+  const [activeId, setActiveId] = useState(null);
+
+  useEffect(() => {
+    if (!activeId && liveReports.length > 0) setActiveId(liveReports[0].id);
+  }, [liveReports, activeId]);
+
+  const active = reports.find(r => r.id === activeId);
+  const ActiveComponent = active ? REPORT_COMPONENTS[active.id] : null;
+  const { today, weekAgo } = getDefaultDates();
 
   return (
     <WorkspaceContext.Provider value={workspace}>
@@ -71,7 +118,6 @@ function Dashboard({ session }) {
           <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <span className="text-lg font-semibold text-text-primary">Smart Layer</span>
-              <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-positive/15 text-positive uppercase tracking-wide">Live</span>
             </div>
             <div className="flex items-center gap-3">
               <WorkspaceSwitcher workspace={workspace} setWorkspace={setWorkspace} />
@@ -79,22 +125,34 @@ function Dashboard({ session }) {
               <button onClick={() => supabase.auth.signOut()} className="text-xs text-text-muted hover:text-text-primary">Sign out</button>
             </div>
           </div>
+          {workspace && (
+            <div className="max-w-5xl mx-auto px-4 flex items-center justify-between">
+              <div className="flex gap-0 overflow-x-auto">
+                {liveReports.map(r => (
+                  <button key={r.id} onClick={() => setActiveId(r.id)}
+                    className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                      activeId === r.id ? 'border-accent text-accent' : 'border-transparent text-text-muted hover:text-text-secondary'
+                    }`}>
+                    {r.title}
+                  </button>
+                ))}
+              </div>
+              <AddDataSource notLiveReports={notLiveReports} onPick={setActiveId} />
+            </div>
+          )}
         </header>
         <main className="max-w-5xl mx-auto px-4 py-4">
-          {workspace ? <WorkspaceTabs /> : <p className="text-sm text-text-muted">No workspace yet — install the Shopify app to get started.</p>}
+          {!workspace ? (
+            <p className="text-sm text-text-muted">No workspace yet — install the Shopify app to get started.</p>
+          ) : !active ? (
+            <p className="text-sm text-text-muted">No data sources connected yet — use "Connect a data source" above.</p>
+          ) : (
+            <ActiveComponent start={weekAgo} end={today} report={active} onLive={refetch} />
+          )}
         </main>
       </div>
     </WorkspaceContext.Provider>
   );
-}
-
-function WorkspaceTabs() {
-  const { data } = useApi('/api/reports');
-  const products = (data?.reports || []).find(r => r.id === 'products');
-  const { today, weekAgo } = getDefaultDates();
-
-  if (!data) return <p className="text-sm text-text-muted">Loading...</p>;
-  return <ProductsTab start={weekAgo} end={today} report={products} />;
 }
 
 export default function App() {

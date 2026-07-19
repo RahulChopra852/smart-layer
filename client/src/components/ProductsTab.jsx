@@ -96,11 +96,14 @@ function CatalogState() {
   );
 }
 
-export default function ProductsTab({ start, end, report }) {
+export default function ProductsTab({ start, end, report, onLive }) {
   const [range, setRange] = useState({ start, end });
 
-  if (!report || report.status !== 'live') {
-    return <SetupForm report={report} onLive={() => window.location.reload()} />;
+  // 'validated' means the probe confirmed required fields are present but no real query has
+  // succeeded yet — render the dashboard anyway; the first live fetch promotes it to 'live'
+  // server-side (see server/routes/data.js markOutcome). Anything else (draft/error) needs setup.
+  if (!report || !['live', 'validated'].includes(report.status)) {
+    return <SetupForm report={report} onLive={onLive} />;
   }
 
   return (
