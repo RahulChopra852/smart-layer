@@ -43,15 +43,21 @@ Two repos, shared git history, permanently linked:
 | Repo | Role | Deployment |
 |---|---|---|
 | `gnc-smart-layer` (GitHub: `RahulChopra1024-PM/GNC-Dashboard`) | **Sandbox / lab.** Live single-brand GNC dashboard. Fast experiments against real data. Must keep running throughout the build. | current GNC deployment |
-| `smart-layer` (this repo) | **Product.** Clean, multi-tenant, config-driven. | new deployment |
+| `smart-layer` (this repo) | **Product.** Clean, multi-tenant, config-driven. Serves ALL brands. | new deployment |
 
 This repo was created with `git clone gnc-smart-layer smart-layer` — **full shared history** — so
 `git cherry-pick` and `git merge` work across the two with sane rename/conflict behavior. Each repo
 has the other as a remote (`gnc` here; `smart` in the GNC repo).
 
-**Sync workflow** (full commands in `SYNC.md` at repo root):
-- Feature proven in the sandbox → `git fetch gnc && git cherry-pick <sha>` here.
-- Fix made here that applies to GNC → `git fetch smart && git cherry-pick <sha>` there.
+**Change flow is ONE-WAY: sandbox → product** (full commands in `SYNC.md` at repo root):
+- All feature/UI/shared-logic work is built and validated in the sandbox first, then **promoted**
+  here: `git fetch gnc && git cherry-pick <sha>`.
+- **Never push feature work directly to this repo** — a bad change here impacts every brand at
+  once. Bugs found in the product's shared UI are reproduced and fixed in the sandbox, then
+  promoted.
+- Only product-only infrastructure (workspaces/auth, connectors, setup-form framework, migrations,
+  sync engine) is written here directly — via feature branches, verified before merging to `main`,
+  because `main` is what all brands run.
 
 **Conventions that keep cherry-picks clean — these are rules, not suggestions:**
 1. Keep `client/src/components/` file names and paths **identical across both repos** wherever a
