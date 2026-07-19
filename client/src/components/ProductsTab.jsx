@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef } from 'react';
 import { useApi } from '../hooks/useApi';
 import SectionNav from './SectionNav';
+import DateRangePicker, { SingleDatePicker } from './DateRangePicker';
 
 function Delta({ value, suffix = '' }) {
   if (value == null || isNaN(value)) return <span className="text-[11px] text-text-muted">—</span>;
@@ -109,15 +110,8 @@ function ProductsInsightsCard({ start, end }) {
             <div className="mt-1"><LastProductSync /></div>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <input
-            type="date"
-            value={selectedDate}
-            max={todayStr}
-            onChange={e => { e.stopPropagation(); setSelectedDate(e.target.value); }}
-            onClick={e => e.stopPropagation()}
-            className="bg-bg border border-border text-text-primary text-xs px-2.5 py-1.5 rounded-md focus:outline-none focus:border-accent"
-          />
+        <div className="flex items-center gap-3" onClick={e => e.stopPropagation()}>
+          <SingleDatePicker value={selectedDate} max={todayStr} onChange={setSelectedDate} />
           {!loading && products.length > 0 && (
             <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-accent/15 text-accent">
               {products.length} products
@@ -209,14 +203,8 @@ function ProductFunnelCard({ start, end }) {
             <p className="text-xs text-text-muted mt-0.5">{subtitle}</p>
           </div>
         </div>
-        <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
-          <input type="date" value={rangeStart} max={rangeEnd}
-            onChange={e => setRangeStart(e.target.value)}
-            className="bg-bg border border-border text-text-primary text-[11px] px-2 py-1 rounded-md focus:outline-none focus:border-accent" />
-          <span className="text-[10px] text-text-muted">to</span>
-          <input type="date" value={rangeEnd} min={rangeStart}
-            onChange={e => setRangeEnd(e.target.value)}
-            className="bg-bg border border-border text-text-primary text-[11px] px-2 py-1 rounded-md focus:outline-none focus:border-accent" />
+        <div onClick={e => e.stopPropagation()}>
+          <DateRangePicker compact start={rangeStart} end={rangeEnd} onChange={({ start: s, end: e }) => { setRangeStart(s); setRangeEnd(e); }} />
         </div>
       </div>
 
@@ -502,15 +490,7 @@ function OosHistoryCard() {
                 />
                 <div className="flex items-center gap-2">
                   <label className="text-xs text-text-secondary whitespace-nowrap">What was OOS on:</label>
-                  <input
-                    type="date"
-                    value={onDate}
-                    onChange={(e) => setOnDate(e.target.value)}
-                    className="bg-bg border border-border text-text-primary text-xs px-2.5 py-1.5 rounded-md focus:outline-none focus:border-accent"
-                  />
-                  {onDate && (
-                    <button onClick={() => setOnDate('')} className="text-[11px] text-accent hover:underline">clear</button>
-                  )}
+                  <SingleDatePicker value={onDate} onChange={setOnDate} clearable />
                 </div>
               </div>
 

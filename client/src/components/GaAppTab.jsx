@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useApi } from '../hooks/useApi';
 import SectionNav from './SectionNav';
+import DateRangePicker from './DateRangePicker';
 
 const GA_APP_SECTIONS = [
   { id: 'ga-app-overview', label: 'Current Month Overview' },
@@ -296,15 +297,7 @@ function ProductPagesCard({ start, end }) {
     <div className="bg-card border border-border rounded-lg p-4">
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <h2 className="text-base font-semibold text-text-primary">Product Pages</h2>
-        <div className="flex items-center gap-2">
-          <input type="date" value={rangeStart} max={rangeEnd}
-            onChange={e => setRangeStart(e.target.value)}
-            className="bg-bg border border-border text-text-primary text-xs px-2.5 py-1.5 rounded-md focus:outline-none focus:border-accent" />
-          <span className="text-xs text-text-muted">to</span>
-          <input type="date" value={rangeEnd} min={rangeStart}
-            onChange={e => setRangeEnd(e.target.value)}
-            className="bg-bg border border-border text-text-primary text-xs px-2.5 py-1.5 rounded-md focus:outline-none focus:border-accent" />
-        </div>
+        <DateRangePicker start={rangeStart} end={rangeEnd} onChange={({ start: s, end: e }) => { setRangeStart(s); setRangeEnd(e); }} />
       </div>
 
       {loading && <div className="text-xs text-text-muted py-4 text-center">Loading...</div>}

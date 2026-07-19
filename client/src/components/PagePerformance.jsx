@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useApi } from '../hooks/useApi';
+import DateRangePicker from './DateRangePicker';
 
 function Tooltip({ text, children }) {
   const [show, setShow] = useState(false);
@@ -62,23 +63,7 @@ export default function PagePerformance({ start, end, mode = 'top' }) {
         ) : (
           <span className="text-[10px] text-text-muted">Sync status unknown</span>
         )}
-        <div className="flex items-center gap-1.5">
-          <input
-            type="date"
-            value={rangeStart}
-            max={rangeEnd}
-            onChange={e => setRangeStart(e.target.value)}
-            className="bg-bg border border-border text-text-primary text-[11px] px-2 py-1 rounded-md focus:outline-none focus:border-accent"
-          />
-          <span className="text-[10px] text-text-muted">to</span>
-          <input
-            type="date"
-            value={rangeEnd}
-            min={rangeStart}
-            onChange={e => setRangeEnd(e.target.value)}
-            className="bg-bg border border-border text-text-primary text-[11px] px-2 py-1 rounded-md focus:outline-none focus:border-accent"
-          />
-        </div>
+        <DateRangePicker compact start={rangeStart} end={rangeEnd} onChange={({ start: s, end: e }) => { setRangeStart(s); setRangeEnd(e); }} />
       </div>
 
       {loading ? (

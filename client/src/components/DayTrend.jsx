@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useApi } from '../hooks/useApi';
+import { SingleDatePicker } from './DateRangePicker';
 
 const fmt = (v) => v == null ? '—' : Math.round(v).toLocaleString();
 const fmtCur = (v) => v == null ? '—' : `₹${Math.round(v).toLocaleString()}`;
@@ -34,9 +35,7 @@ export default function DayTrend() {
           <h2 className="text-base font-semibold text-text-primary">{dayName} Trend</h2>
           <p className="text-xs text-text-muted mt-0.5">{isToday ? 'Today' : selected.date} vs previous day vs last {sameDayHistory.length} {dayName}s</p>
         </div>
-        <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)}
-          max={new Date().toISOString().slice(0, 10)}
-          className="bg-bg border border-border text-text-primary text-xs px-2.5 py-1.5 rounded-md focus:outline-none focus:border-accent" />
+        <SingleDatePicker value={selectedDate} onChange={setSelectedDate} max={new Date().toISOString().slice(0, 10)} />
       </div>
 
       {/* Web Table */}
