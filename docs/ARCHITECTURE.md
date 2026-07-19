@@ -46,7 +46,7 @@ Everything else (Shopify, GA4, VWO, PSI, Metabase) is queried live through its c
 
 | Source | Auth | Query pattern | Feeds |
 |---|---|---|---|
-| **Shopify** | Smart Layer Shopify app (token-vending connector) — the onboarding anchor | live GraphQL per request | Orders/revenue/units, catalog, inventory/OOS |
+| **Shopify** | Smart Layer Shopify app — merchant pastes its fixed proxy key into ConnectionsHub | live GraphQL, proxied through the connector app | Orders/revenue/units, catalog, inventory/OOS |
 | **Google Analytics 4** | Per-workspace Google OAuth | live GA4 Data API `runReport` per request | CRO funnel, page sessions, session anomalies (computed on the fly), GA App tab |
 | **Metabase** | Per-workspace Metabase base URL + API key | live Metabase Query API (`/api/card/:id/query` or ad-hoc dataset query) per request | Any tab, for brands whose data already lives in a warehouse behind Metabase |
 | **Meta Ads** | CSV upload (no live API in v1) | **stored** — Smart Layer is the source of record for uploaded rows | Meta tab incl. Budget Leak Detector |
@@ -149,7 +149,7 @@ smart-layer/
 │   ├── connectors/             # one module per source type — the ONLY code that talks to external APIs.
 │   │   │                       # Each is stateless: given a connection + query params, returns rows.
 │   │   │                       # Nothing here writes to our own DB except meta.js (uploads).
-│   │   ├── shopify.js          # token vending via connector app + live Admin GraphQL queries
+│   │   ├── shopify.js          # proxies GraphQL through the connector app using the pasted proxy key
 │   │   ├── ga4.js              # OAuth flow, property listing, live runReport wrapper, probe
 │   │   ├── metabase.js         # live Query API calls against a brand's Metabase instance
 │   │   ├── meta.js             # CSV parse (ported metaParser.js) + column probe + upload storage
@@ -232,8 +232,8 @@ smart_layer.rca_notes     (workspace_id uuid fk, + GNC's rca_notes column list, 
 `connections.secret_ciphertext` = AES-256-GCM of a JSON blob (`{refresh_token}` for GA4,
 `{api_token}` for VWO, `{api_key}` for PSI, `{api_key, base_url}` for Metabase). Key from
 `ENCRYPTION_KEY` env (32 bytes, base64). Never log secrets; never return them from any API —
-`GET /api/connections` returns `meta` only. Shopify stores **no long-lived secret** (tokens are
-vended per-use, §6.1).
+`GET /api/connections` returns `meta` only. Shopify's secret is `{ proxy_key }` — the merchant's
+fixed key from the connector app, pasted by hand like every other source (§6.1).
 
 ---
 
@@ -251,30 +251,37 @@ There is no `fetchData`-into-storage step for live sources — `query()` is call
 `/api/data/:reportId/...` route handler for every dashboard render, and the result flows straight
 to the client. Compute steps (§9) sit between `query()` and the response for CRO/anomalies/OOS.
 
-### 6.1 Shopify — via the Smart Layer connector app (the onboarding anchor)
+### 6.1 Shopify — via the Smart Layer connector app, as a GraphQL proxy (confirmed 2026-07-20)
 
-The Smart Layer Shopify app (`ai-data-analytics-smart-db-connector` repo — a zero-DB OAuth
-token-vending tunnel, same project as our control-plane DB, see §3) is how every brand connects.
-**Contract (finalize field names against the connector repo before implementing; shape below is
-the working agreement):**
+**Onboarding is manual paste, not an install webhook.** Confirmed by reading the connector app's
+own `CLAUDE.md` (`ai-data-analytics-smart-db-connector` repo): it is a **fixed-key GraphQL proxy**,
+not a token vendor, and it never calls out to Smart Layer. A merchant installs it via standard
+Shopify OAuth, and it shows them **one fixed key** (`sdbc_live_<hex>`) in its own UI, full stop.
+The merchant then creates a Smart Layer workspace by hand (`CreateWorkspace` in `App.jsx`, hitting
+the already-existing `POST /api/workspaces`) and pastes that key into `ConnectionsHub` as a
+`shopify` connection — same paste-a-key shape as every other source type (§1.1 was updated to
+match: this decision generalizes to GA4/VWO/PSI/Metabase too, see §6.2's note).
 
-1. **Install hook** — connector calls us when a merchant installs the app:
-   `POST /api/hooks/connector/install` body `{ shop_domain, email }`, HMAC-signed with shared
-   secret `CONNECTOR_WEBHOOK_SECRET`. Handler is idempotent: find-or-create workspace by
-   `shop_domain`, create a `shopify` connection (no secret stored), invite `email` as admin.
-2. **Token vending** — per request, live:
-   `GET {CONNECTOR_URL}/api/token?shop={shop_domain}` with `Authorization: Bearer {CONNECTOR_API_KEY}`
-   → `{ access_token, expires_at }`. Memoize in `liveCache` until `expires_at - 60s` — this is a
-   cache, not storage; losing it just means one extra vend call. On 401/404 mark the connection
-   `status='error'` (merchant uninstalled).
-3. All Shopify reads use Admin **GraphQL** (2025-01) with the vended token, called live:
-   - Commerce snapshot: `orders(query: "created_at:>=X created_at:<=Y")` → count,
-     `currentTotalPriceSet`, line-item quantities.
-   - Catalog + inventory: `products` (id, title, handle, status, variants → sku,
-     inventoryQuantity) — OOS state is derived by diffing this live snapshot against the *previous*
-     live snapshot result held only in `liveCache` (see §9.2 for what this means for OOS history).
-   - Fallback: a connection can be created manually with a pasted Admin token
-     (`meta.manual_token`, encrypted) for brands not using the app.
+The earlier draft of this section (install webhook + `GET /api/token` vending) described a
+contract that turned out not to exist and was never implemented as such — `server/routes/hooks.js`
+was deleted. The real flow:
+
+1. **Connection**: `connections.secret_ciphertext = { proxy_key: "sdbc_live_..." }`, entered via
+   `ConnectionsHub`. No `shop_domain` needed in `meta` — the connector resolves the shop from the
+   fixed key itself.
+2. **Every query** goes through the connector's own proxy, not directly to Shopify:
+   `POST {CONNECTOR_URL}/api/graphql`, `Authorization: Bearer <proxy_key>`, body
+   `{ query, variables }` — the connector refreshes Shopify's underlying expiring token internally
+   and forwards the query, returning Shopify's GraphQL response verbatim (`{ data, errors? }`).
+   Smart Layer never sees a raw Shopify access token. `CONNECTOR_URL` is the only global env var
+   needed (no `CONNECTOR_API_KEY`/`CONNECTOR_WEBHOOK_SECRET` — those never existed).
+3. Queries used, same as before: commerce snapshot via `orders(query: "created_at:>=X
+   created_at:<=Y")` → count, `currentTotalPriceSet`, line-item quantities; catalog + inventory via
+   `products` (id, title, handle, status, variants → sku, inventoryQuantity) — OOS state derived by
+   diffing this live snapshot against the *previous* one held only in `liveCache` (§9.2).
+4. Note the connector's `CLAUDE.md` also flags: it isn't deployed anywhere permanent yet (planned
+   Hostinger VPS); local dev uses `shopify app dev`'s temporary tunnel, whose URL changes every
+   run — `CONNECTOR_URL` needs updating each time during that phase.
 
 ### 6.2 Google Analytics 4 — per-workspace OAuth
 
@@ -513,15 +520,19 @@ first draft.
 
 ## 12. Build phases & acceptance criteria
 
-**Phase 0 — prove the pattern (Shopify end-to-end, live query-through)**
-Scaffold per §4. Migration already applied (§5). Auth gate + workspace resolution. Connector
-install hook + live token vending (mock the connector with a fixture server until the contract is
-finalized). Products report: registry entry, setup form with field checklist, probe, live
-`connectors/shopify.js` `query()`, ported ProductsTab rendering live data with no storage layer.
-✅ *Accept*: a workspace created via the install hook, Products tab configured entirely through the
-form, real Shopify data on screen fetched live (verify by checking Shopify Admin directly — no
-Smart Layer table has a copy), a second call within the cache TTL doesn't re-hit Shopify (check
-`liveCache` hit), RLS verified (second user in another workspace sees nothing).
+**Phase 0 — prove the pattern (Shopify end-to-end, live query-through)** — DONE 2026-07-20
+Scaffold per §4. Migration already applied (§5). Auth gate + manual `CreateWorkspace` UI (no
+install webhook — see §6.1). Products report: registry entry, setup form with field checklist,
+probe, live `connectors/shopify.js` `query()` proxied through the connector app, fresh
+(not-ported) ProductsTab rendering live data with no storage layer. Both apps running locally:
+backend :3001, frontend :5174 (gnc-smart-layer sandbox keeps 3000/5173).
+✅ *Accept*: a workspace created by hand, a Shopify proxy key pasted into ConnectionsHub, Products
+tab configured entirely through the form, real Shopify data on screen fetched live through the
+connector proxy (verify by checking Shopify Admin directly — no Smart Layer table has a copy), a
+second call within the cache TTL doesn't re-hit the proxy (check `liveCache` hit), RLS verified
+(second user in another workspace sees nothing). **Still blocked on**: real
+`SUPABASE_SERVICE_ROLE_KEY`/`SUPABASE_JWT_SECRET` in `.env` (can't be fetched via any tool, must
+come from the Supabase dashboard) and a reachable `CONNECTOR_URL` (connector isn't deployed yet).
 
 **Phase 1 — GA4 + Metabase + CRO**
 Google OAuth flow, property picker, `ga4.js` connector + probe + `croFunnel`/`anomalies` compute.
@@ -558,9 +569,11 @@ us). **Persisted OOS/anomaly history** is explicitly deferred (§9.2) — don't 
 ```
 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / SUPABASE_JWT_SECRET   # jwyiwddltautdngljqja project
 ENCRYPTION_KEY                # 32-byte base64, for connection secrets
-GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_OAUTH_REDIRECT_URI
-CONNECTOR_URL / CONNECTOR_API_KEY / CONNECTOR_WEBHOOK_SECRET
-PORT (3000)
+GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_OAUTH_REDIRECT_URI  # likely dropped for a
+                               # paste-a-key GA4 flow before Phase 1 — see §6.1's note
+CONNECTOR_URL                  # base URL only — it's a proxy the merchant's own pasted key
+                               # authenticates against, no global connector credential needed
+PORT (3001)                    # 3000/5173 belong to gnc-smart-layer's sandbox, see §2
 ```
 
 ## 15. Known open item
