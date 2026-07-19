@@ -1,95 +1,112 @@
-import { useState, useCallback } from 'react';
-import CroDashboard from './components/CroDashboard';
-import WebVitalsTab from './components/WebVitalsTab';
+import { useState, useEffect, useMemo } from 'react';
+import { supabase } from './lib/supabaseClient';
+import { WorkspaceContext } from './lib/workspace';
+import { useApi } from './hooks/useApi';
 import ProductsTab from './components/ProductsTab';
-import AbTestsTab from './components/AbTestsTab';
-import VwoTab from './components/VwoTab';
-import MetaTab from './components/MetaTab';
-import GaAppTab from './components/GaAppTab';
-import GaWebTab from './components/GaWebTab';
-import GokwikTab from './components/GokwikTab';
-import GoogleAdsTab from './components/GoogleAdsTab';
-import SummaryTab from './components/SummaryTab';
-import SyncStatus from './components/SyncStatus';
-import DateRangePicker from './components/DateRangePicker';
-import HomePage from './components/HomePage';
-import ChatWidget from './components/ChatWidget';
-import { TABS } from './tabs';
 
 function getDefaultDates() {
-  const end = new Date().toISOString().slice(0, 10);
-  const start = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
-  return { start, end };
+  const today = new Date().toISOString().slice(0, 10);
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  return { today, weekAgo };
 }
 
-export default function App() {
-  const defaults = getDefaultDates();
-  const [start, setStart] = useState(defaults.start);
-  const [end, setEnd] = useState(defaults.end);
-  const [tab, setTab] = useState(null);
-  const [refreshKey, setRefreshKey] = useState(0);
+function SignIn() {
+  const [email, setEmail] = useState('');
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState(null);
 
-  const handleSyncComplete = useCallback(() => setRefreshKey(k => k + 1), []);
-
-  const handleNavigate = useCallback((tabId) => {
-    setTab(tabId);
-  }, []);
-
-  if (tab === null) {
-    return <>
-      <HomePage onNavigate={handleNavigate} />
-      <ChatWidget />
-    </>;
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError(null);
+    const { error } = await supabase.auth.signInWithOtp({ email });
+    if (error) setError(error.message);
+    else setSent(true);
   }
 
   return (
-    <div className="min-h-screen bg-bg">
-      <header className="sticky top-0 z-10 bg-card/90 backdrop-blur-md border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setTab(null)}
-              className="text-lg font-semibold text-text-primary hover:text-accent transition-colors"
-              title="Back to home"
-            >
-              GNC Smart Layer
+    <div className="min-h-screen bg-bg flex items-center justify-center">
+      <form onSubmit={handleSubmit} className="bg-card border border-border rounded-lg p-6 w-80 flex flex-col gap-3">
+        <h1 className="text-lg font-semibold text-text-primary">Smart Layer</h1>
+        {sent ? (
+          <p className="text-sm text-positive">Check your email for a sign-in link.</p>
+        ) : (
+          <>
+            <input type="email" required placeholder="you@brand.com" value={email} onChange={e => setEmail(e.target.value)}
+              className="text-sm bg-bg border border-border rounded px-3 py-2" />
+            {error && <p className="text-xs text-negative">{error}</p>}
+            <button type="submit" className="px-3 py-2 text-sm font-medium rounded-md bg-accent text-white hover:opacity-90">
+              Send magic link
             </button>
-            <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-positive/15 text-positive uppercase tracking-wide">Live</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <DateRangePicker start={start} end={end} onChange={({ start: s, end: e }) => { setStart(s); setEnd(e); }} />
-            <SyncStatus onSyncComplete={handleSyncComplete} />
-          </div>
-        </div>
-
-        <div className="max-w-7xl mx-auto px-4 flex gap-0 overflow-x-auto">
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                tab === t.id
-                  ? 'border-accent text-accent'
-                  : 'border-transparent text-text-muted hover:text-text-secondary'
-              }`}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-4 py-4" key={refreshKey}>
-        {tab === 'summary' && <SummaryTab onNavigate={handleNavigate} />}
-        {tab === 'cro' && <CroDashboard start={start} end={end} />}
-        {tab === 'ga-app' && <GaAppTab start={start} end={end} />}
-        {tab === 'ga-web' && <GaWebTab start={start} end={end} />}
-        {tab === 'vitals' && <WebVitalsTab start={start} end={end} />}
-        {tab === 'products' && <ProductsTab start={start} end={end} />}
-        {tab === 'google-ads' && <GoogleAdsTab />}
-        {tab === 'meta' && <MetaTab />}
-        {tab === 'abtests' && <AbTestsTab start={start} end={end} />}
-        {tab === 'vwo' && <VwoTab />}
-        {tab === 'gokwik' && <GokwikTab />}
-      </main>
-      <ChatWidget />
+          </>
+        )}
+      </form>
     </div>
   );
+}
+
+function WorkspaceSwitcher({ workspace, setWorkspace }) {
+  const { data } = useApi('/api/workspaces', { skip: !!workspace });
+  const workspaces = useMemo(() => data?.workspaces || [], [data]);
+
+  useEffect(() => {
+    if (!workspace && workspaces.length > 0) setWorkspace(workspaces[0]);
+  }, [workspaces, workspace, setWorkspace]);
+
+  if (workspaces.length <= 1) return null;
+  return (
+    <select value={workspace?.id || ''} onChange={e => setWorkspace(workspaces.find(w => w.id === e.target.value))}
+      className="text-xs bg-bg border border-border rounded px-2 py-1">
+      {workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+    </select>
+  );
+}
+
+function Dashboard({ session }) {
+  const [workspace, setWorkspace] = useState(null);
+
+  return (
+    <WorkspaceContext.Provider value={workspace}>
+      <div className="min-h-screen bg-bg">
+        <header className="sticky top-0 z-10 bg-card/90 backdrop-blur-md border-b border-border">
+          <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-lg font-semibold text-text-primary">Smart Layer</span>
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-positive/15 text-positive uppercase tracking-wide">Live</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <WorkspaceSwitcher workspace={workspace} setWorkspace={setWorkspace} />
+              <span className="text-xs text-text-muted">{session.user.email}</span>
+              <button onClick={() => supabase.auth.signOut()} className="text-xs text-text-muted hover:text-text-primary">Sign out</button>
+            </div>
+          </div>
+        </header>
+        <main className="max-w-5xl mx-auto px-4 py-4">
+          {workspace ? <WorkspaceTabs /> : <p className="text-sm text-text-muted">No workspace yet — install the Shopify app to get started.</p>}
+        </main>
+      </div>
+    </WorkspaceContext.Provider>
+  );
+}
+
+function WorkspaceTabs() {
+  const { data } = useApi('/api/reports');
+  const products = (data?.reports || []).find(r => r.id === 'products');
+  const { today, weekAgo } = getDefaultDates();
+
+  if (!data) return <p className="text-sm text-text-muted">Loading...</p>;
+  return <ProductsTab start={weekAgo} end={today} report={products} />;
+}
+
+export default function App() {
+  const [session, setSession] = useState(undefined);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  if (session === undefined) return null;
+  if (!session) return <SignIn />;
+  return <Dashboard session={session} />;
 }
