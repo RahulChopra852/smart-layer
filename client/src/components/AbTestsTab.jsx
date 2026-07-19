@@ -11,20 +11,17 @@ const CATEGORIES = [
 
 const METRIC_LABELS = { ATC: 'ATC Optimization', IC: 'IC (Initiate Checkout) Optimization', RPP: 'RPP (Reached Payment) Optimization', CVR: 'CVR (Overall) Optimization' };
 
-// The CRO source sheet fills in IC/RPP a couple of days behind Sessions/ATC, so the very last
-// row in range is often a real day with those columns still blank (reads as a false 0%, not an
-// actual drop). Walk back to the most recent row that actually has both populated.
-function pickLatestComplete(rows) {
-  if (!rows || rows.length === 0) return null;
-  for (let i = rows.length - 1; i >= 0; i--) {
-    const r = rows[i];
-    if (r.sessions > 0 && r.ic_pct != null && r.rpp_pct != null && (r.ic_pct > 0 || r.rpp_pct > 0)) return r;
-  }
-  return rows[rows.length - 1];
-}
+// This quarter's stated focus areas — static reference content, set by hand each quarter rather
+// than derived from any table, so the AB test backlog below stays visibly anchored to a goal.
+const QUARTER_FOCUS_AREAS = [
+  'Trustification on the website',
+  'SEO / AIO / AI bots visibility',
+  "Optimising PDPs for increasing ATC",
+  "Optimising PDPs for increasing CVR",
+];
 
 const ABTESTS_SECTIONS = [
-  { id: 'abtests-funnel-state', label: 'Current Funnel State' },
+  { id: 'abtests-quarter-plan', label: 'Quarter Plan' },
   ...CATEGORIES.map(c => ({ id: `abtests-${c.metric.toLowerCase()}`, label: METRIC_LABELS[c.metric] })),
 ];
 
@@ -252,8 +249,7 @@ function CollapsibleCard({ title, subtitle, badge, headerExtra, children, defaul
   );
 }
 
-export default function AbTestsTab({ start, end }) {
-  const { data: funnelData } = useApi(`/api/analytics/cro-funnel-deltas?start=${start}&end=${end}`);
+export default function AbTestsTab() {
   const { data: testsData, loading, error, refetch } = useApi('/api/analytics/ab-tests');
   const [localTests, setLocalTests] = useState(null);
 
@@ -277,37 +273,21 @@ export default function AbTestsTab({ start, end }) {
     setLocalTests(prev => (prev || testsData?.tests || []).map(t => t.id === id ? { ...t, ticket_code: null } : t));
   }
 
-  const webLatest = pickLatestComplete(funnelData?.web);
-  const context = webLatest ? {
-    date: webLatest.date,
-    atc_pct: webLatest.atc_pct,
-    ic_pct: webLatest.ic_pct,
-    rpp_pct: webLatest.rpp_pct,
-    cvr_pct: webLatest.cvr_pct,
-  } : null;
-
   return (
     <div className="flex flex-col gap-4">
       <SectionNav sections={ABTESTS_SECTIONS} />
-      {context && (
-        <div id="abtests-funnel-state">
-          <CollapsibleCard title="Current Funnel State" subtitle={`Tests are prioritized based on the biggest conversion drop-offs in your funnel${context.date ? ` · as of ${context.date}` : ''}`}>
-            <div className="flex gap-4">
-              {[
-                { label: 'ATC %', val: context.atc_pct },
-                { label: 'IC %', val: context.ic_pct },
-                { label: 'RPP %', val: context.rpp_pct },
-                { label: 'CVR %', val: context.cvr_pct },
-              ].map(m => (
-                <div key={m.label} className="flex-1 bg-bg rounded-md p-3 border border-border/50 text-center">
-                  <div className="text-[10px] text-text-muted uppercase">{m.label}</div>
-                  <div className="text-lg font-bold text-text-primary">{m.val != null ? `${m.val.toFixed(1)}%` : '—'}</div>
-                </div>
-              ))}
-            </div>
-          </CollapsibleCard>
-        </div>
-      )}
+      <div id="abtests-quarter-plan">
+        <CollapsibleCard title="Quarter Plan" subtitle="This quarter's focus areas — the backlog below should trace back to one of these" defaultOpen={false}>
+          <ol className="flex flex-col gap-2">
+            {QUARTER_FOCUS_AREAS.map((area, i) => (
+              <li key={i} className="flex items-center gap-3 bg-bg rounded-md p-3 border border-border/50">
+                <span className="shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-accent/15 text-accent text-xs font-bold">{i + 1}</span>
+                <span className="text-sm text-text-primary">{area}</span>
+              </li>
+            ))}
+          </ol>
+        </CollapsibleCard>
+      </div>
 
       {error && <div className="bg-card border border-border rounded-lg p-4"><p className="text-xs text-negative">{error}</p></div>}
 
@@ -318,6 +298,7 @@ export default function AbTestsTab({ start, end }) {
             <CollapsibleCard
               title={METRIC_LABELS[metric]}
               subtitle={`Target area: ${area}`}
+              defaultOpen={metric === 'ATC'}
               headerExtra={<GenerateButton metric={metric} area={area} onGenerated={handleGenerated} />}
               badge={
                 <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-accent/15 text-accent">
@@ -351,7 +332,7 @@ export default function AbTestsTab({ start, end }) {
             key={key}
             title={title}
             subtitle="Tests moved here after triage, from every metric category"
-            defaultOpen={statusTests.length > 0}
+            defaultOpen={false}
             badge={
               <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-accent/15 text-accent">
                 {statusTests.length} tests
